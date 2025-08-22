@@ -362,9 +362,16 @@ docker-compose up -d
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
-
-
 ## 🙏 Acknowledgments
+- **Debanjan Koley**: This project is part of a coding assignment for AI Engineer position
+- **Microsoft AutoGen**: Multi-agent conversation framework
+- **OpenAI**: Large language model API
+- **Streamlit**: Web application framework
+
+
+**Made with ❤️ by Harikrishna Marampelly
+
+
 
 As part of Coding assignment for AI Engineer
 
