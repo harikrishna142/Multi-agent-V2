@@ -1,29 +1,28 @@
 """
-Requirement Analysis Agent for the Multi-Agentic Coding Framework.
-Refines natural language requirements into structured software specifications.
+Enhanced Requirement Analysis Agent
+Generates detailed, technical specifications for complete application development.
 """
 
-import autogen
-import re
-from datetime import datetime
+import autogen, time
 from typing import Dict, Any, List
 from core.config import get_agent_config, config
-from core.utils import save_json, setup_logging
-from core.validation import validate_requirement_analysis, sanitize_llm_output
+from core.utils import setup_logging
 
 logger = setup_logging()
 
-class RequirementAnalysisAgent:
-    """Agent responsible for analyzing and refining requirements."""
+class RequirementAgent:
+    """Enhanced requirement analysis agent that generates complete technical specifications."""
     
     def __init__(self):
         self.agent_config = get_agent_config("requirement_agent")
         self.llm_config = config.get_llm_config()
         
-        # Create the agent
+        # Create the agent with enhanced system message
+        enhanced_system_message = self._get_system_message()
+        
         self.agent = autogen.AssistantAgent(
             name=self.agent_config["name"],
-            system_message=self.agent_config["system_message"],
+            system_message=enhanced_system_message,
             llm_config=self.llm_config
         )
         
@@ -37,75 +36,82 @@ class RequirementAnalysisAgent:
             llm_config=self.llm_config
         )
     
-    def analyze_requirement(self, natural_language_requirement: str) -> Dict[str, Any]:
+    def _get_system_message(self) -> str:
+        """Get system message for requirement analysis."""
+        return """You are a helpful requirement analyst that creates simple, clear specifications for basic applications. You analyze user requirements and create straightforward technical specifications.
+
+## YOUR ROLE:
+- Analyze natural language requirements
+- Create simple, achievable specifications for basic version of the application that cane ruunable
+- Define basic functional requirements
+- Suggest simple technology stacks
+- Generate basic architecture descriptions
+
+## ANALYSIS PROCESS:
+1. **Understand the basic requirement** from user input
+2. **Identify simple features** that can be implemented
+3. **Choose basic technology stack** (Flask, React, SQLite, etc.)
+4. **Create simple architecture** description
+5. **Define basic functional requirements**
+6. **Generate simple API specifications**
+
+## SPECIFICATION REQUIREMENTS:
+
+### 1. **Project Overview**:
+- Simple project name and description
+- Basic technology stack (backend, frontend, database)
+- Simple version information
+
+### 2. **Functional Requirements**:
+- List basic features that can be implemented
+- Simple descriptions of each feature
+- Basic priority levels (High, Medium, Low)
+- Simple acceptance criteria
+
+### 3. **Architecture**:
+- Simple system design description
+- Basic database schema (if needed)
+- Simple API endpoints
+- Basic file structure
+
+### 4. **Technology Stack**:
+- Choose simple, popular frameworks
+- Use basic databases (SQLite, simple file storage)
+- Include basic dependencies
+- Keep it simple and achievable
+
+## IMPORTANT GUIDELINES:
+
+✅ **Keep specifications simple and achievable**
+✅ **Use basic, well-known technologies**
+✅ **Focus on core functionality**
+✅ **Create specifications for basic applications**
+✅ **Make requirements clear and simple**
+
+❌ **Do not create complex enterprise specifications**
+❌ **Do not demand advanced features**
+❌ **Do not require complex architectures**
+❌ **Do not specify production-level requirements**
+
+**YOUR TASK**: Create simple, clear specifications for a basic application based on the user's requirements.
+
+End your response with "TERMINATE" to indicate completion."""
+    
+    def analyze_requirements(self, natural_language_input: str, project_id: str = None) -> Dict[str, Any]:
         """
-        Analyze natural language requirement and convert to structured format.
+        Analyze natural language input and generate comprehensive technical specifications.
         
         Args:
-            natural_language_requirement: The original requirement in natural language
+            natural_language_input: Natural language description of the project
+            project_id: Optional project ID to use (if not provided, will generate one)
             
         Returns:
-            Dict containing structured requirements
+            Dict containing detailed technical specifications
         """
-        logger.info("Starting requirement analysis")
+        logger.info("Starting enhanced requirement analysis")
         
-        # Create the analysis prompt
-        analysis_prompt = f"""
-Please analyze the following software requirement and provide a structured breakdown:
-
-REQUIREMENT: {natural_language_requirement}
-
-Based on this requirement, please provide a comprehensive analysis in the following JSON format:
-
-{{
-    "project_name": "",
-    "description": "",
-    "functional_requirements": [
-        {{
-            "id": "FR001",
-            "title": "",
-            "description": "",
-            "priority": "",
-            "acceptance_criteria": []
-        }}
-    ],
-    "non_functional_requirements": [
-        {{
-            "id": "NFR001",
-            "title": "",
-            "description": "",
-            "category": ""
-        }}
-    ],
-    "technical_constraints": [],
-    "assumptions": [],
-    "dependencies": [],
-    "estimated_complexity": "",
-    "suggested_architecture": "",
-    "key_components": []
-}}
-
-ANALYSIS GUIDELINES:
-1. Project Name: Create a clear, descriptive name that reflects the main purpose
-2. Description: Explain what the application will do and its main features   
-3. Functional Requirements: List specific features and capabilities the system must have
-4. Non-Functional Requirements: Consider performance, security, usability, reliability
-5. Technical Constraints: Any limitations or requirements for technology/platform
-6. Assumptions: What you assume about users, environment, or other factors   
-7. Dependencies: External systems, libraries, or services needed
-8. Complexity: Assess the overall complexity based on features and requirements
-9. Architecture: Suggest an appropriate technical architecture
-10. Key Components: Main modules or components the system will need
-
-CRITICAL INSTRUCTIONS:
-- You MUST fill in ALL empty fields with your actual analysis
-- Do NOT leave any fields empty or with placeholder text
-- Do NOT copy the template structure - replace it with real content
-- Generate a complete, functional project specification
-- Be specific and detailed in your analysis
-
-IMPORTANT: End your response with the word "TERMINATE" to indicate completion.
-"""
+        # Create detailed analysis prompt
+        analysis_prompt = self._create_analysis_prompt(natural_language_input)
         
         try:
             # Start the conversation
@@ -114,173 +120,278 @@ IMPORTANT: End your response with the word "TERMINATE" to indicate completion.
                 message=analysis_prompt
             )
             
-            # Extract the last message from the agent
-            last_message = None
-            logger.info(f"Chat history length: {len(chat_result.chat_history)}")
+            # Extract the LLM response
+            from core.utils import extract_llm_response
+            last_message = extract_llm_response(chat_result)
             
-            # Log all messages for debugging
-            for i, message in enumerate(chat_result.chat_history):
-                role = message.get("role", "unknown")
-                content_preview = message.get("content", "")[:100]
-                logger.info(f"Message {i}: role={role}, content_preview={content_preview}...")
+            # Parse the JSON response
+            import json
+            import re
             
-            # Find the LLM response - it's in the user message (AutoGen structure)
-            for message in reversed(chat_result.chat_history):
-                if message.get("role") == "user":
-                    last_message = message.get("content", "")
-                    logger.info(f"Found user message (LLM response) with length: {len(last_message)}")
-                    break
+            # Extract JSON from the response
+            json_match = re.search(r'```json\s*(.*?)\s*```', last_message, re.DOTALL)
+            if json_match:
+                specifications = json.loads(json_match.group(1))
+            else:
+                # Try to find JSON without markdown
+                json_match = re.search(r'\{.*\}', last_message, re.DOTALL)
+                if json_match:
+                    specifications = json.loads(json_match.group(0))
+                else:
+                    raise ValueError("No valid JSON found in response")
             
-            # If no user message found, fall back to assistant message
-            if not last_message:
-                for message in reversed(chat_result.chat_history):
-                    if message.get("role") == "assistant":
-                        last_message = message.get("content", "")
-                        logger.info(f"Found assistant message with length: {len(last_message)}")
-                        break
+            # Validate and enhance specifications
+            enhanced_specifications = self._enhance_specifications(specifications)
             
-            if not last_message:
-                raise ValueError("No response received from requirement analysis agent")
+            # Use provided project_id or generate one
+            if project_id is None:
+                project_id = f"project_{int(time.time())}_{hash(natural_language_input) % 10000:04x}"
             
-            # Debug: Log the actual response content
-            logger.info(f"Full response length: {len(last_message)}")
-            logger.info(f"Response preview: {last_message[:500]}...")
-            logger.info(f"Response ends with: {last_message[-100:]}")
-            
-            # Save the full response for debugging
-            with open('debug_last_message.txt', 'w', encoding='utf-8') as f:
-                f.write(last_message)
-            logger.info("Full response saved to debug_last_message.txt")
-            
-            # Use Pydantic validation to extract and validate the requirement analysis
-            try:
-                # Clean up the LLM output
-                cleaned_output = sanitize_llm_output(last_message)
+            result = {
+                "project_id": project_id,
+                "natural_language_input": natural_language_input,
+                "specifications": enhanced_specifications,
+                "analysis_timestamp": time.time(),
+                "total_requirements": len(enhanced_specifications.get("functional_requirements", [])),
                 
-                # Validate and extract the requirement analysis
-                validated_requirements = validate_requirement_analysis(cleaned_output)
-                
-                # Convert Pydantic model to dictionary
-                structured_requirements = validated_requirements.dict()
-                
-                logger.info("✅ Successfully validated requirement analysis using Pydantic")
-                logger.info(f"Project name: {structured_requirements.get('project_name', 'N/A')}")
-                
-            except Exception as e:
-                logger.error(f"Validation failed: {e}")
-                logger.info("Falling back to basic structure")
-                
-                # Fall back to basic structure
-                structured_requirements = {
-                    "project_name": "Generated Project",
-                    "description": natural_language_requirement,
-                    "functional_requirements": [
-                        {
-                            "id": "FR001",
-                            "title": "Main Functionality",
-                            "description": natural_language_requirement,
-                            "priority": "high",
-                            "acceptance_criteria": ["Functionality works as described"]
-                        }
-                    ],
-                    "non_functional_requirements": [],
-                    "technical_constraints": [],
-                    "assumptions": [],
-                    "dependencies": [],
-                    "estimated_complexity": "medium",
-                    "suggested_architecture": "Modular Python application",
-                    "key_components": ["Main application module"]
-                }
+            }
             
-            # Add metadata
-            structured_requirements["original_requirement"] = natural_language_requirement
-            structured_requirements["analysis_timestamp"] = str(datetime.now())
+            # Save specifications to file
+            self._save_specifications_to_file(result, project_id)
             
-            logger.info("Requirement analysis completed successfully")
-            return structured_requirements
+            print(f"Parsed Specifications: {json.dumps(enhanced_specifications, indent=2)}")
+            print(f"Final Result: {json.dumps(result, indent=2)}")
+            logger.info(f"Enhanced requirement analysis completed. Generated {result['total_requirements']} detailed requirements.")
+            return result
             
         except Exception as e:
-            logger.error(f"Error in requirement analysis: {e}")
-            # Return a basic structure in case of error
-            return {
-                "project_name": "Generated Project",
-                "description": natural_language_requirement,
+            logger.error(f"Error in enhanced requirement analysis: {e}")
+            return self._generate_fallback_specifications(natural_language_input, str(e))
+    
+    def _create_analysis_prompt(self, natural_language_input: str) -> str:
+        """Create detailed analysis prompt."""
+        
+        return f"""
+Please analyze the following project requirement and generate technical specifications for basic version of the application that can run:
+
+## PROJECT REQUIREMENT:
+{natural_language_input}
+
+## ANALYSIS REQUIREMENTS:
+
+1. **Technology Stack Selection**: Choose the most appropriate and modern technology stack for this project     
+2. **System Architecture**: simple system architecture for basic version of the application that can demonstrate requirement
+3. **Database Design**: if database needed create simple schema
+4. **API Design**: if needed implement few endpoints that needed to demonstrate simple demo
+5. **Frontend Design**: Specify the frontend framework and component architecture
+6. **Security Implementation**: Define basic authentication and security measures
+7. **Deployment Strategy**: Specify simple deployment approach
+
+## EXPECTED OUTPUT:
+
+Generate JSON specification that includes:
+
+1. **Project Overview**: project details and technology stack
+2. **Architecture**: System design, database schema, and API specifications
+3. **Functional Requirements**: Detailed use cases, data models, and business logic
+4. **Non-Functional Requirements**: Performance, security, and reliability specifications
+5. **Implementation Plan**: Phases, deliverables, and file structure
+
+## IMPORTANT GUIDELINES:
+
+- **Be Specific**: Use exact technology names, versions, and configurations
+- **Be Clear**: Every requirement must have detailed implementation specifications for basic version of the application that can run
+- **Be Scalable**: Design for growth and future requirements
+- **Be Secure**: Include basic security measures
+- **Be Modern**: Use current best practices and modern frameworks
+
+## OUTPUT FORMAT:
+
+You MUST respond with ONLY a valid JSON object in this exact format:
+
+```json
+{{
+  "project_overview": {{
+    "name": "Project Name",
+    "description": "Project description",
+    "version": "1.0.0",
+    "technology_stack": {{
+      "backend_framework": "flask",
+      "frontend_framework": "react",
+      "database": "sqlite",
+      "api_type": "rest"
+    }}
+  }},
+  "architecture": {{
+    "system_design": "Simple description",
+    "database_schema": {{
+      "tables": [
+        {{
+          "name": "users",
+          "columns": [
+            {{"name": "id", "type": "integer", "primary_key": true}},
+            {{"name": "username", "type": "string", "nullable": false}}
+          ]
+        }}
+      ]
+    }},
+    "api_specifications": {{
+      "endpoints": [
+        {{
+          "path": "/api/users",
+          "method": "GET",
+          "description": "Get all users"
+        }}
+      ]
+    }}
+  }},
+  "functional_requirements": [
+    {{
+      "id": "FR001",
+      "name": "User Registration",
+      "description": "Users can register for an account",
+      "priority": "High",
+      "acceptance_criteria": ["User can create account", "Email validation"]
+    }}
+  ],
+  "non_functional_requirements": {{
+    "performance": "Basic performance requirements",
+    "security": "Basic security measures",
+    "reliability": "Basic reliability requirements"
+  }},
+  "implementation_plan": {{
+    "phases": [
+      {{
+        "phase": 1,
+        "name": "Setup",
+        "deliverables": ["Project structure", "Basic configuration"]
+      }}
+    ],
+    "file_structure": [
+      "app.py",
+      "requirements.txt",
+      "README.md"
+    ]
+  }}
+}}
+```
+
+IMPORTANT: Respond with ONLY the JSON object, no additional text or explanations.
+
+TERMINATE
+"""
+    
+    def _enhance_specifications(self, specifications: Dict[str, Any]) -> Dict[str, Any]:
+        """Enhance specifications with additional details and validation."""
+        
+        # Add missing sections if not present
+        if "project_overview" not in specifications:
+            specifications["project_overview"] = {}
+        
+        if "architecture" not in specifications:
+            specifications["architecture"] = {}
+        
+        if "functional_requirements" not in specifications:
+            specifications["functional_requirements"] = []
+        
+        if "non_functional_requirements" not in specifications:
+            specifications["non_functional_requirements"] = []
+        
+       
+        
+        # Add implementation details
+        specifications["implementation_details"] = {
+            "development_environment": {
+                "python_version": "3.11",
+                "node_version": "18.0.0",
+                "database": "PostgreSQL 15",
+                "cache": "Redis 7.0"
+            },
+            "deployment_environment": {
+                "containerization": "Docker",
+                "orchestration": "Docker Compose",
+                "cloud_provider": "AWS",
+                "monitoring": "Prometheus + Grafana"
+            }
+        }
+        
+        return specifications
+    
+    def _generate_fallback_specifications(self, natural_language_input: str, error: str) -> Dict[str, Any]:
+        """Generate fallback specifications when analysis fails."""
+        
+        return {
+            "project_id": f"project_{int(time.time())}_{hash(natural_language_input) % 10000:04x}",
+            "natural_language_input": natural_language_input,
+            "specifications": {
+                "project_overview": {
+                    "name": "Generated Project",
+                    "description": natural_language_input,
+                    "version": "1.0.0",
+                    "technology_stack": {
+                        "backend": {
+                            "framework": "FastAPI",
+                            "database": "PostgreSQL",
+                            "authentication": "JWT"
+                        },
+                        "frontend": {
+                            "framework": "React",
+                            "state_management": "Redux Toolkit"
+                        }
+                    }
+                },
                 "functional_requirements": [
                     {
                         "id": "FR001",
-                        "title": "Main Functionality",
-                        "description": natural_language_requirement,
-                        "priority": "high",
-                        "acceptance_criteria": ["Functionality works as described"]
+                        "title": "Basic Functionality",
+                        "description": "Implement basic application functionality",
+                        "priority": "High"
                     }
-                ],
-                "non_functional_requirements": [],
-                "technical_constraints": [],
-                "assumptions": [],
-                "dependencies": [],
-                "estimated_complexity": "medium",
-                "suggested_architecture": "Modular Python application",
-                "key_components": ["Main application module"],
-                "original_requirement": natural_language_requirement,
-                "analysis_timestamp": str(datetime.now()),
-                "error": str(e)
-            }
+                ]
+            },
+            "error": error,
+            "fallback_mode": True
+        }
     
-    def save_requirements(self, requirements: Dict[str, Any], project_id: str) -> str:
-        """Save structured requirements to a JSON file."""
-        filename = f"{project_id}_requirements.json"
-        return save_json(requirements, filename, config.output_dir)
-    
-    def get_requirements_summary(self, requirements: Dict[str, Any]) -> str:
-        """Generate a human-readable summary of the requirements."""
-        summary = f"""
-# Project Requirements Summary
-
-## Project: {requirements.get('project_name', 'N/A')}
-
-### Description
-{requirements.get('description', 'N/A')}
-
-### Functional Requirements ({len(requirements.get('functional_requirements', []))})
-"""
+    def _save_specifications_to_file(self, result: Dict[str, Any], project_id: str) -> None:
+        """
+        Save specifications to a JSON file for debugging and reference.
         
-        for req in requirements.get('functional_requirements', []):
-            summary += f"""
-- **{req.get('id', 'N/A')}: {req.get('title', 'N/A')}**
-  - Priority: {req.get('priority', 'N/A')}
-  - Description: {req.get('description', 'N/A')}
-  - Acceptance Criteria: {', '.join(req.get('acceptance_criteria', []))}
-"""
-        
-        summary += f"""
-### Non-Functional Requirements ({len(requirements.get('non_functional_requirements', []))})
-"""
-        
-        for req in requirements.get('non_functional_requirements', []):
-            summary += f"""
-- **{req.get('id', 'N/A')}: {req.get('title', 'N/A')}**
-  - Category: {req.get('category', 'N/A')}
-  - Description: {req.get('description', 'N/A')}
-"""
-        
-        summary += f"""
-### Technical Constraints
-{chr(10).join(f'- {constraint}' for constraint in requirements.get('technical_constraints', []))}
-
-### Assumptions
-{chr(10).join(f'- {assumption}' for assumption in requirements.get('assumptions', []))}
-
-### Dependencies
-{chr(10).join(f'- {dependency}' for dependency in requirements.get('dependencies', []))}
-
-### Architecture Suggestion
-{requirements.get('suggested_architecture', 'N/A')}
-
-### Key Components
-{chr(10).join(f'- {component}' for component in requirements.get('key_components', []))}
-
-### Estimated Complexity
-{requirements.get('estimated_complexity', 'N/A')}
-"""
-        
-        return summary 
+        Args:
+            result: The complete result from requirement analysis
+            project_id: The project ID to use in filename
+        """
+        try:
+            import json
+            import os
+            from datetime import datetime
+            
+            # Create output directory if it doesn't exist
+            output_dir = "output/requirement_specifications"
+            os.makedirs(output_dir, exist_ok=True)
+            
+            # Create filename with timestamp
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            filename = f"specifications_{project_id}_{timestamp}.json"
+            filepath = os.path.join(output_dir, filename)
+            
+            # Save the complete result
+            with open(filepath, 'w', encoding='utf-8') as f:
+                json.dump(result, f, indent=2, ensure_ascii=False)
+            
+            logger.info(f"Specifications saved to: {filepath}")
+            print(f"Specifications saved to: {filepath}")
+            
+            # Also save a simplified version with just the specifications
+            spec_filename = f"specifications_only_{project_id}_{timestamp}.json"
+            spec_filepath = os.path.join(output_dir, spec_filename)
+            
+            with open(spec_filepath, 'w', encoding='utf-8') as f:
+                json.dump(result.get("specifications", {}), f, indent=2, ensure_ascii=False)
+            
+            logger.info(f"Specifications only saved to: {spec_filepath}")
+            print(f"Specifications only saved to: {spec_filepath}")
+            
+        except Exception as e:
+            logger.error(f"Failed to save specifications to file: {e}")
+            print(f"Failed to save specifications to file: {e}")

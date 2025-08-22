@@ -1,27 +1,30 @@
 """
-Documentation Agent for the Multi-Agentic Coding Framework.
-Generates comprehensive documentation for the developed code.
+Enhanced Documentation Agent
+Generates comprehensive documentation for complete applications.
 """
 
 import autogen
-import re
+import os
+import json
 from typing import Dict, Any, List
 from core.config import get_agent_config, config
-from core.utils import save_to_file, setup_logging, load_from_file
+from core.utils import save_to_file, setup_logging
 
 logger = setup_logging()
 
 class DocumentationAgent:
-    """Agent responsible for generating comprehensive documentation."""
+    """Enhanced documentation agent that generates comprehensive documentation."""
     
     def __init__(self):
         self.agent_config = get_agent_config("documentation_agent")
         self.llm_config = config.get_llm_config()
         
-        # Create the agent
+        # Create the agent with enhanced system message
+        enhanced_system_message = self._get_system_message()
+        
         self.agent = autogen.AssistantAgent(
             name=self.agent_config["name"],
-            system_message=self.agent_config["system_message"],
+            system_message=enhanced_system_message,
             llm_config=self.llm_config
         )
         
@@ -35,540 +38,562 @@ class DocumentationAgent:
             llm_config=self.llm_config
         )
     
-    def generate_documentation(self, generated_code: Dict[str, Any], requirements: Dict[str, Any], project_id: str) -> Dict[str, Any]:
+    def _get_system_message(self) -> str:
+        """Get system message for documentation generation."""
+        return """You are a helpful documentation generator that creates basic, clear documentation for simple applications. You generate straightforward documentation that helps users understand and use the application.
+
+## YOUR ROLE:
+- Generate basic project documentation
+- Create simple README files
+- Write basic API documentation
+- Generate simple user guides
+- Create basic setup instructions
+- Write simple troubleshooting guides
+
+## DOCUMENTATION GENERATION PROCESS:
+1. **Analyze the application structure** and features
+2. **Create basic project overview** and description
+3. **Generate simple setup instructions**
+4. **Write basic usage examples**
+5. **Create simple API documentation**
+6. **Generate basic troubleshooting guide**
+
+## DOCUMENTATION REQUIREMENTS:
+
+### 1. **Project README**:
+- Simple project description
+- Basic features list
+- Simple installation instructions
+- Basic usage examples
+- Simple configuration options
+
+### 2. **API Documentation**:
+- Basic endpoint descriptions
+- Simple request/response examples
+- Basic error handling information
+- Simple authentication details (if applicable)
+
+### 3. **User Guide**:
+- Simple getting started tutorial
+- Basic feature walkthroughs
+- Simple examples and use cases
+- Basic troubleshooting tips
+
+### 4. **Setup Documentation**:
+- Simple installation steps
+- Basic configuration instructions
+- Simple environment setup
+- Basic deployment guide
+
+## IMPORTANT GUIDELINES:
+
+✅ **Create simple, clear documentation**
+✅ **Focus on basic functionality**
+✅ **Use simple language and examples**
+✅ **Generate helpful, practical content**
+✅ **Keep documentation straightforward**
+
+❌ **Do not create complex technical documentation**
+❌ **Do not require advanced knowledge**
+❌ **Do not generate enterprise-level documentation**
+❌ **Do not create complex tutorials**
+
+**YOUR TASK**: Generate basic, clear documentation for the application that helps users understand and use it.
+
+End your response with "TERMINATE" to indicate completion."""
+    
+    def generate_documentation(self, specifications: Dict[str, Any], generated_files: Dict[str, Any], project_id: str) -> Dict[str, Any]:
         """
-        Generate comprehensive documentation for the developed code.
+        Generate comprehensive documentation for the application.
         
         Args:
-            generated_code: Output from CodingAgent containing generated files
-            requirements: Original requirements for context
+            specifications: Technical specifications from RequirementAgent
+            generated_files: Generated code files from CodingAgent
             project_id: Unique project identifier
             
         Returns:
-            Dict containing generated documentation files
+            Dict containing documentation files and metadata
         """
-        logger.info("Starting documentation generation")
+        logger.info("Starting comprehensive documentation generation")
         
-        # Load the actual code content
-        code_files = {}
-        for filename, filepath in generated_code.get("generated_files", {}).items():
-            try:
-                code_files[filename] = load_from_file(filepath)
-            except Exception as e:
-                logger.warning(f"Could not load file {filename}: {e}")
-                code_files[filename] = f"# Error loading file: {e}"
-        
-        # Create the documentation prompt
-        doc_prompt = f"""
-Please generate comprehensive documentation for the following Python project:
-
-PROJECT REQUIREMENTS:
-{self._format_requirements_for_documentation(requirements)}
-
-GENERATED CODE FILES:
-{self._format_code_for_documentation(code_files)}
-
-Please generate the following documentation:
-
-1. **README.md**: Main project documentation with:
-   - Project overview and description
-   - Installation instructions
-   - Usage examples
-   - API documentation
-   - Contributing guidelines
-
-2. **API_DOCUMENTATION.md**: Detailed API documentation with:
-   - Function and class documentation
-   - Parameter descriptions
-   - Return value descriptions
-   - Usage examples
-   - Error handling
-
-3. **DEVELOPER_GUIDE.md**: Developer-focused documentation with:
-   - Architecture overview
-   - Code structure explanation
-   - Development setup
-   - Testing guidelines
-   - Deployment instructions
-
-4. **USER_GUIDE.md**: End-user documentation with:
-   - Getting started guide
-   - Feature descriptions
-   - Troubleshooting
-   - FAQ
-
-5. **CHANGELOG.md**: Version history and changes
-
-For each file, provide complete, well-structured documentation that is:
-- Clear and easy to understand
-- Comprehensive and detailed
-- Well-organized with proper headings
-- Includes practical examples
-- Follows documentation best practices
-
-Please provide each documentation file in the following format:
-
-```markdown
-# filename: README.md
-[complete documentation here]
-```
-
-```markdown
-# filename: API_DOCUMENTATION.md
-[complete documentation here]
-```
-
-And so on for each file.
-
-IMPORTANT: End your response with the word "TERMINATE" to indicate completion.
-"""
+        # Create detailed documentation generation prompt
+        documentation_prompt = self._create_documentation_generation_prompt(specifications, generated_files)
         
         try:
             # Start the conversation
             chat_result = self.user_proxy.initiate_chat(
                 self.agent,
-                message=doc_prompt
+                message=documentation_prompt
             )
             
-            # Extract the LLM response using utility function
+            # Extract the LLM response
             from core.utils import extract_llm_response
             last_message = extract_llm_response(chat_result)
             
-            # Parse and organize the generated documentation
+            # Extract and process all generated documentation files
             generated_docs = self._parse_generated_documentation(last_message)
             
-            # Save the generated documentation
-            saved_docs = self._save_generated_documentation(generated_docs, project_id)
+            # Validate and enhance the generated documentation
+            validated_docs = self._validate_and_enhance_documentation(generated_docs)
+            
+            # Save all documentation files
+            saved_docs = self._save_generated_documentation(validated_docs, project_id)
+            
+            # Generate additional documentation files
+            additional_docs = self._generate_additional_documentation(specifications, generated_files, project_id)
+            saved_docs.update(additional_docs)
             
             result = {
                 "project_id": project_id,
-                "generated_documentation": saved_docs,
-                "total_docs": len(saved_docs),
-                "documentation_summary": self._generate_documentation_summary(saved_docs)
+                "documentation_files": saved_docs,
+                "documentation_type": self._determine_documentation_type(specifications),
+                "total_documentation_files": len(saved_docs),
+                "readme_files": len([f for f in saved_docs.keys() if "README" in f]),
+                "api_docs": len([f for f in saved_docs.keys() if "api" in f.lower()]),
+                "user_guides": len([f for f in saved_docs.keys() if "user" in f.lower() or "guide" in f.lower()]),
+                "developer_docs": len([f for f in saved_docs.keys() if "developer" in f.lower() or "dev" in f.lower()]),
+                "deployment_docs": len([f for f in saved_docs.keys() if "deployment" in f.lower() or "deploy" in f.lower()]),
+                "documentation_ready": True
             }
             
-            logger.info(f"Documentation generation completed. Generated {len(saved_docs)} documentation files.")
+            logger.info(f"Comprehensive documentation generation finished. Generated {len(saved_docs)} documentation files.")
             return result
             
         except Exception as e:
             logger.error(f"Error in documentation generation: {e}")
-            # Generate fallback documentation
-            fallback_docs = self._generate_fallback_documentation(requirements, code_files, project_id)
-            return {
-                "project_id": project_id,
-                "generated_documentation": fallback_docs,
-                "total_docs": len(fallback_docs),
-                "documentation_summary": "Fallback documentation generated due to error",
-                "error": str(e)
-            }
+            return self._generate_fallback_documentation(specifications, generated_files, project_id, str(e))
     
-    def _format_requirements_for_documentation(self, requirements: Dict[str, Any]) -> str:
-        """Format requirements for documentation context."""
-        formatted = f"""
-Project: {requirements.get('project_name', 'N/A')}
-Description: {requirements.get('description', 'N/A')}
+    def _create_documentation_generation_prompt(self, specifications: Dict[str, Any], generated_files: Dict[str, Any]) -> str:
+        """Create detailed documentation generation prompt."""
+        
+        # Extract key information from specifications
+        project_overview = specifications.get("project_overview", {})
+        functional_reqs = specifications.get("functional_requirements", [])
+        architecture = specifications.get("architecture", {})
+        
+        tech_stack = project_overview.get("technology_stack", {})
+        backend_stack = tech_stack.get("backend", {})
+        frontend_stack = tech_stack.get("frontend", {})
+        
+        prompt = f"""
+Generate comprehensive documentation for the following application:
 
-Functional Requirements:
+## PROJECT OVERVIEW:
+- Name: {project_overview.get('name', 'Generated Application')}
+- Description: {project_overview.get('description', 'N/A')}
+- Backend: {backend_stack.get('framework', 'FastAPI')}
+- Frontend: {frontend_stack.get('framework', 'React')}
+- Database: {backend_stack.get('database', 'PostgreSQL')}
+
+## FUNCTIONAL REQUIREMENTS:
 """
         
-        for req in requirements.get('functional_requirements', []):
-            formatted += f"""
+        for req in functional_reqs:
+            prompt += f"""
 - {req.get('id', 'N/A')}: {req.get('title', 'N/A')}
   Description: {req.get('description', 'N/A')}
-  Priority: {req.get('priority', 'N/A')}
   Acceptance Criteria: {', '.join(req.get('acceptance_criteria', []))}
 """
         
-        formatted += f"""
-Non-Functional Requirements:
-"""
-        
-        for req in requirements.get('non_functional_requirements', []):
-            formatted += f"""
-- {req.get('id', 'N/A')}: {req.get('title', 'N/A')}
-  Category: {req.get('category', 'N/A')}
-  Description: {req.get('description', 'N/A')}
-"""
-        
-        return formatted
-    
-    def _format_code_for_documentation(self, code_files: Dict[str, str]) -> str:
-        """Format code files for documentation generation."""
-        formatted = ""
-        
-        for filename, content in code_files.items():
-            formatted += f"""
-=== FILE: {filename} ===
-{content}
-=== END FILE: {filename} ===
+        prompt += f"""
+## ARCHITECTURE:
+{json.dumps(architecture, indent=2)}
+
+## GENERATED CODE FILES:
+The following code has been generated for this project. Please create documentation based on the actual implementation:
 
 """
         
-        return formatted
+        # Add generated files to the prompt
+        for filename, content in generated_files.items():
+            prompt += f"""
+### {filename}:
+```{self._get_file_extension(filename)}
+{content}
+```
+"""
+        
+        prompt += """
+## DOCUMENTATION REQUIREMENTS:
+
+Please generate the following documentation files:
+
+1. **README.md** - Project overview, setup, and usage
+2. **API_DOCUMENTATION.md** - API endpoints and usage
+3. **USER_GUIDE.md** - User instructions and examples
+4. **DEVELOPER_GUIDE.md** - Development setup and contribution
+5. **DEPLOYMENT_GUIDE.md** - Deployment instructions
+
+For each file, provide complete documentation with:
+- Clear explanations
+- Code examples
+- Setup instructions
+- Usage examples
+- Troubleshooting tips
+
+IMPORTANT: Generate documentation that matches the actual code implementation.
+
+Please generate the complete documentation with all files and full content.
+
+IMPORTANT: End your response with "TERMINATE" to indicate completion.
+"""
+        
+        return prompt
     
     def _parse_generated_documentation(self, response: str) -> Dict[str, str]:
-        """Parse the generated documentation response and extract individual files."""
+        """Parse generated documentation files from the response."""
         import re
         
-        files = {}
+        docs = {}
         
-        # Look for filename patterns in the response
-        filename_pattern = r'# filename: ([^\n]+)'
-        filename_matches = re.findall(filename_pattern, response)
+        # Extract markdown blocks with filenames
+        markdown_blocks = re.findall(r'```markdown\s*# filename: ([^\n]+)\s*(.*?)```', response, re.DOTALL)
         
-        # Split the response by filename markers
-        sections = re.split(r'# filename:', response)
+        for filename, content in markdown_blocks:
+            docs[filename] = content.strip()
         
-        if len(sections) > 1:
-            for i, section in enumerate(sections[1:], 1):
-                if i <= len(filename_matches):
-                    filename = filename_matches[i-1].strip()
-                    # Extract content after the filename
-                    content = section.strip()
-                    if content:
-                        files[filename] = content
+        # Also look for markdown blocks without explicit filenames
+        if not docs:
+            markdown_blocks = re.findall(r'```markdown\s*(.*?)```', response, re.DOTALL)
+            for i, content in enumerate(markdown_blocks):
+                # Try to infer filename from content
+                filename = self._infer_documentation_filename(content, i)
+                docs[filename] = content.strip()
+        
+        return docs
+    
+    def _infer_documentation_filename(self, content: str, index: int) -> str:
+        """Infer documentation filename from content."""
+        if "# API Documentation" in content or "## Endpoints" in content:
+            return f"docs/api/overview.md"
+        elif "# User Guide" in content or "## Getting Started" in content:
+            return f"docs/user-guide/getting-started.md"
+        elif "# Developer Guide" in content or "## Architecture" in content:
+            return f"docs/developer/architecture.md"
+        elif "# README" in content or "## Project Overview" in content:
+            return f"README.md"
+        elif "# Deployment" in content or "## Installation" in content:
+            return f"docs/deployment/guide.md"
         else:
-            # Fallback: create basic documentation files
-            files = self._create_basic_documentation_structure(response)
-        
-        return files
+            return f"docs/documentation_{index}.md"
     
-    def _create_basic_documentation_structure(self, response: str) -> Dict[str, str]:
-        """Create basic documentation structure when parsing fails."""
-        return {
-            "README.md": f"""# Project Documentation
-
-{response}
-
-## Overview
-This is the main documentation for the generated project.
-
-## Installation
-```bash
-pip install -r requirements.txt
-```
-
-## Usage
-```bash
-python main.py
-```
-
-## Documentation
-This documentation was generated automatically. Please refer to the code comments for detailed information.
-""",
-            "API_DOCUMENTATION.md": f"""# API Documentation
-
-{response}
-
-## Functions and Classes
-This section contains detailed API documentation for all functions and classes in the project.
-
-## Usage Examples
-Examples of how to use the various functions and classes.
-""",
-            "DEVELOPER_GUIDE.md": f"""# Developer Guide
-
-{response}
-
-## Architecture
-Overview of the project architecture and design decisions.
-
-## Development Setup
-Instructions for setting up the development environment.
-
-## Testing
-Guidelines for testing the application.
-""",
-            "USER_GUIDE.md": f"""# User Guide
-
-{response}
-
-## Getting Started
-Step-by-step guide for new users.
-
-## Features
-Detailed description of all available features.
-
-## Troubleshooting
-Common issues and their solutions.
-"""
-        }
+    def _get_file_extension(self, filename: str) -> str:
+        """Get appropriate file extension for a filename."""
+        if filename.endswith('.py'):
+            return 'python'
+        elif filename.endswith('.js'):
+            return 'javascript'
+        elif filename.endswith('.html'):
+            return 'html'
+        elif filename.endswith('.css'):
+            return 'css'
+        elif filename.endswith('.json'):
+            return 'json'
+        elif filename.endswith('.yml') or filename.endswith('.yaml'):
+            return 'yaml'
+        elif filename.endswith('.sql'):
+            return 'sql'
+        elif filename.endswith('.md'):
+            return 'markdown'
+        else:
+            return 'text'
     
-    def _save_generated_documentation(self, docs: Dict[str, str], project_id: str) -> Dict[str, str]:
-        """Save generated documentation to files and return content."""
-        saved_docs = {}
+    def _validate_and_enhance_documentation(self, docs: Dict[str, str]) -> Dict[str, str]:
+        """Validate and enhance the generated documentation."""
+        enhanced_docs = {}
         
         for filename, content in docs.items():
-            # Create project-specific documentation directory
-            project_dir = f"{config.output_dir}/{project_id}/docs"
-            filepath = save_to_file(content, filename, project_dir)
-            # Return the content, not the filepath, for frontend display
-            saved_docs[filename] = content
+            # Basic validation for markdown content
+            if not content.strip():
+                logger.warning(f"Empty documentation content for {filename}")
+                continue
+            
+            # Enhance documentation with better formatting
+            enhanced_content = self._enhance_markdown_content(content)
+            enhanced_docs[filename] = enhanced_content
         
-        return saved_docs
+        return enhanced_docs
     
-    def _generate_documentation_summary(self, saved_docs: Dict[str, str]) -> str:
-        """Generate a summary of the created documentation."""
-        summary = f"""
-# Documentation Summary
-
-Generated {len(saved_docs)} documentation files:
-
-"""
+    def _enhance_markdown_content(self, content: str) -> str:
+        """Enhance markdown content with better formatting."""
+        # Add table of contents if not present
+        if "# " in content and "## " in content and "## Table of Contents" not in content:
+            lines = content.split('\n')
+            toc_lines = []
+            toc_lines.append("## 📋 Table of Contents\n")
+            
+            for line in lines:
+                if line.startswith('## '):
+                    title = line[3:].strip()
+                    anchor = title.lower().replace(' ', '-').replace(':', '').replace('(', '').replace(')', '')
+                    toc_lines.append(f"- [{title}](#{anchor})")
+            
+            if len(toc_lines) > 1:
+                # Insert TOC after first heading
+                for i, line in enumerate(lines):
+                    if line.startswith('# ') and not line.startswith('## '):
+                        lines.insert(i + 1, '')
+                        lines.insert(i + 2, '\n'.join(toc_lines))
+                        lines.insert(i + 3, '')
+                        break
+                
+                content = '\n'.join(lines)
         
-        for filename, filepath in saved_docs.items():
-            summary += f"- **{filename}**: {filepath}\n"
-        
-        summary += f"""
-## Documentation Coverage
-- ✅ README.md: Main project documentation
-- ✅ API_DOCUMENTATION.md: Detailed API reference
-- ✅ DEVELOPER_GUIDE.md: Developer-focused guide
-- ✅ USER_GUIDE.md: End-user documentation
-
-## Next Steps
-1. Review the generated documentation
-2. Customize content as needed
-3. Add project-specific examples
-4. Update installation instructions
-5. Add screenshots or diagrams if applicable
-"""
-        
-        return summary
+        return content
     
-    def _generate_fallback_documentation(self, requirements: Dict[str, Any], code_files: Dict[str, str], project_id: str) -> Dict[str, str]:
-        """Generate basic fallback documentation when the main generation fails."""
-        project_name = requirements.get('project_name', 'GeneratedProject')
+    def _save_generated_documentation(self, docs: Dict[str, str], project_id: str) -> Dict[str, str]:
+        """Save generated documentation files and return content."""
+        try:
+            saved_docs = {}
+            project_dir = f"output/documentation/{project_id}"
+            os.makedirs(project_dir, exist_ok=True)
+            
+            for filename, content in docs.items():
+                # Use save_to_file with correct parameters: (content, filename, output_dir)
+                file_path = save_to_file(content, filename, project_dir)
+                saved_docs[filename] = file_path
+                logger.info(f"Saved documentation file: {file_path}")
+            
+            return saved_docs
+            
+        except Exception as e:
+            logger.error(f"Error saving documentation files: {e}")
+            return {}
+    
+    def _generate_additional_documentation(self, specifications: Dict[str, Any], generated_files: Dict[str, Any], project_id: str) -> Dict[str, str]:
+        """Generate additional documentation files."""
+        additional_docs = {}
         
-        readme_content = f"""# {project_name}
+        # Generate CHANGELOG
+        changelog = self._generate_changelog(specifications)
+        additional_docs["CHANGELOG.md"] = changelog
+        
+        # Generate CONTRIBUTING guide
+        contributing = self._generate_contributing_guide(specifications)
+        additional_docs["CONTRIBUTING.md"] = contributing
+        
+        # Generate LICENSE
+        license_file = self._generate_license_file(specifications)
+        additional_docs["LICENSE"] = license_file
+        
+        return additional_docs
+    
+    def _generate_changelog(self, specifications: Dict[str, Any]) -> str:
+        """Generate changelog."""
+        project_name = specifications.get("project_overview", {}).get("name", "Generated Application")
+        
+        return f"""# Changelog
 
-## Description
-{requirements.get('description', 'N/A')}
+All notable changes to {project_name} will be documented in this file.
 
-## Installation
-```bash
-pip install -r requirements.txt
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [Unreleased]
+
+### Added
+- Initial project setup
+- Basic functionality implementation
+- Documentation generation
+
+### Changed
+- N/A
+
+### Deprecated
+- N/A
+
+### Removed
+- N/A
+
+### Fixed
+- N/A
+
+### Security
+- N/A
+
+## [1.0.0] - 2024-01-01
+
+### Added
+- Initial release
+- Core application features
+- API endpoints
+- User interface
+- Database integration
+- Authentication system
+- Documentation
+
+### Security
+- JWT-based authentication
+- Password hashing
+- Input validation
+- Rate limiting
+"""
+    
+    def _generate_contributing_guide(self, specifications: Dict[str, Any]) -> str:
+        """Generate contributing guide."""
+        return """# Contributing
+
+We love your input! We want to make contributing to this project as easy and transparent as possible, whether it's:
+
+- Reporting a bug
+- Discussing the current state of the code
+- Submitting a fix
+- Proposing new features
+- Becoming a maintainer
+
+## We Develop with Github
+We use GitHub to host code, to track issues and feature requests, as well as accept pull requests.
+
+## We Use [Github Flow](https://guides.github.com/introduction/flow/)
+Pull requests are the best way to propose changes to the codebase. We actively welcome your pull requests:
+
+1. Fork the repo and create your branch from `main`.
+2. If you've added code that should be tested, add tests.
+3. If you've changed APIs, update the documentation.
+4. Ensure the test suite passes.
+5. Make sure your code lints.
+6. Issue that pull request!
+
+## We Use [Conventional Commits](https://www.conventionalcommits.org/)
+We use conventional commits to keep our commit history clean and meaningful. Please follow the conventional commits specification when making commits.
+
+### Commit Types
+- `feat`: A new feature
+- `fix`: A bug fix
+- `docs`: Documentation only changes
+- `style`: Changes that do not affect the meaning of the code (white-space, formatting, missing semi-colons, etc)
+- `refactor`: A code change that neither fixes a bug nor adds a feature
+- `perf`: A code change that improves performance
+- `test`: Adding missing tests or correcting existing tests
+- `chore`: Changes to the build process or auxiliary tools and libraries such as documentation generation
+
+### Examples
+```
+feat: add user authentication system
+fix: resolve database connection issue
+docs: update API documentation
+style: format code according to style guide
+refactor: restructure user service
+perf: optimize database queries
+test: add unit tests for auth service
+chore: update dependencies
 ```
 
-## Usage
-```bash
-python main.py
-```
+## Any contributions you make will be under the MIT Software License
+In short, when you submit code changes, your submissions are understood to be under the same [MIT License](http://choosealicense.com/licenses/mit/) that covers the project. Feel free to contact the maintainers if that's a concern.
 
-## Project Structure
-This project was generated automatically based on the following requirements:
+## Report bugs using Github's [issue tracker](https://github.com/username/project/issues)
+We use GitHub issues to track public bugs. Report a bug by [opening a new issue](https://github.com/username/project/issues/new); it's that easy!
 
-### Functional Requirements
-"""
-        
-        for req in requirements.get('functional_requirements', []):
-            readme_content += f"""
-- **{req.get('id', 'N/A')}: {req.get('title', 'N/A')}**
-  - Description: {req.get('description', 'N/A')}
-  - Priority: {req.get('priority', 'N/A')}
-"""
-        
-        readme_content += f"""
-### Non-Functional Requirements
-"""
-        
-        for req in requirements.get('non_functional_requirements', []):
-            readme_content += f"""
-- **{req.get('id', 'N/A')}: {req.get('title', 'N/A')}**
-  - Category: {req.get('category', 'N/A')}
-  - Description: {req.get('description', 'N/A')}
-"""
-        
-        readme_content += f"""
-## Generated Files
-"""
-        
-        for filename in code_files.keys():
-            readme_content += f"- `{filename}`\n"
-        
-        readme_content += f"""
-## Technical Details
-- **Architecture**: {requirements.get('suggested_architecture', 'N/A')}
-- **Complexity**: {requirements.get('estimated_complexity', 'N/A')}
-- **Dependencies**: {', '.join(requirements.get('dependencies', []))}
+## Write bug reports with detail, background, and sample code
 
-## Contributing
-This is an automatically generated project. Please refer to the code comments for implementation details.
+**Great Bug Reports** tend to have:
+
+- A quick summary and/or background
+- Steps to reproduce
+  - Be specific!
+  - Give sample code if you can.
+- What you expected would happen
+- What actually happens
+- Notes (possibly including why you think this might be happening, or stuff you tried that didn't work)
 
 ## License
-This project is generated automatically and may require customization for production use.
+By contributing, you agree that your contributions will be licensed under its MIT License.
+
+## References
+This document was adapted from the open-source contribution guidelines for [Facebook's Draft](https://github.com/facebook/draft-js/blob/a9316a723f9e918afde44dea68b5f9f39b7d9b00/CONTRIBUTING.md).
 """
+    
+    def _generate_license_file(self, specifications: Dict[str, Any]) -> str:
+        """Generate MIT license file."""
+        current_year = "2024"
+        project_name = specifications.get("project_overview", {}).get("name", "Generated Application")
         
-        api_doc_content = f"""# API Documentation - {project_name}
+        return f"""MIT License
 
-## Overview
-This document provides detailed API documentation for the {project_name} project.
+Copyright (c) {current_year} {project_name}
 
-## Generated Code Files
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
 """
+    
+    def _determine_documentation_type(self, specifications: Dict[str, Any]) -> str:
+        """Determine the type of documentation generated."""
+        tech_stack = specifications.get("project_overview", {}).get("technology_stack", {})
         
-        for filename, content in code_files.items():
-            api_doc_content += f"""
-### {filename}
-```python
-{content[:500]}...
-```
-
-**Purpose**: This file was generated based on the project requirements.
-"""
+        if tech_stack.get("frontend") and tech_stack.get("backend"):
+            return "Full-Stack Application Documentation"
+        elif tech_stack.get("backend"):
+            return "Backend API Documentation"
+        elif tech_stack.get("frontend"):
+            return "Frontend Application Documentation"
+        else:
+            return "General Application Documentation"
+    
+    def _generate_fallback_documentation(self, specifications: Dict[str, Any], 
+                                        generated_files: Dict[str, Any], project_id: str, error: str) -> Dict[str, Any]:
+        """Generate fallback documentation when generation fails."""
+        fallback_docs = {
+            "README.md": self._generate_basic_readme(specifications),
+            "CHANGELOG.md": self._generate_changelog(specifications),
+            "LICENSE": self._generate_license_file(specifications),
+            "docs/basic-guide.md": "# Basic Guide\n\nBasic documentation generated as fallback."
+        }
         
-        api_doc_content += f"""
-## Functions and Classes
-The following functions and classes are available in the generated code:
-
-### Main Application
-- `main()`: Entry point of the application
-
-### Configuration
-- `Config`: Application configuration class
-
-## Usage Examples
-```python
-# Run the main application
-python main.py
-
-# Import and use configuration
-from config import Config
-config = Config()
-```
-
-## Error Handling
-The generated code includes basic error handling. Please refer to the individual files for specific error handling patterns.
-
-## Dependencies
-See `requirements.txt` for the complete list of dependencies.
-"""
-        
-        dev_guide_content = f"""# Developer Guide - {project_name}
-
-## Architecture Overview
-This project follows a modular architecture with the following components:
-
-### Core Components
-"""
-        
-        for component in requirements.get('key_components', []):
-            dev_guide_content += f"- {component}\n"
-        
-        dev_guide_content += f"""
-## Development Setup
-1. Clone the repository
-2. Install dependencies: `pip install -r requirements.txt`
-3. Run the application: `python main.py`
-
-## Code Structure
-The project consists of the following files:
-
-"""
-        
-        for filename in code_files.keys():
-            dev_guide_content += f"- `{filename}`: {self._get_file_purpose(filename)}\n"
-        
-        dev_guide_content += f"""
-## Testing
-To test the application:
-```bash
-python -m pytest tests/
-```
-
-## Deployment
-1. Ensure all dependencies are installed
-2. Configure environment variables if needed
-3. Run the application: `python main.py`
-
-## Technical Constraints
-{chr(10).join(f'- {constraint}' for constraint in requirements.get('technical_constraints', []))}
-
-## Assumptions
-{chr(10).join(f'- {assumption}' for assumption in requirements.get('assumptions', []))}
-"""
-        
-        user_guide_content = f"""# User Guide - {project_name}
-
-## Getting Started
-Welcome to {project_name}! This guide will help you get started with the application.
-
-## What is {project_name}?
-{requirements.get('description', 'N/A')}
-
-## Installation
-1. Ensure you have Python 3.8 or higher installed
-2. Install the required dependencies:
-   ```bash
-   pip install -r requirements.txt
-   ```
-
-## Running the Application
-To start the application:
-```bash
-python main.py
-```
-
-## Features
-The following features are available:
-
-"""
-        
-        for req in requirements.get('functional_requirements', []):
-            user_guide_content += f"""
-### {req.get('title', 'N/A')}
-{req.get('description', 'N/A')}
-
-**How to use**: [Instructions will be provided based on implementation]
-"""
-        
-        user_guide_content += f"""
-## Troubleshooting
-
-### Common Issues
-1. **Import errors**: Make sure all dependencies are installed
-2. **Configuration errors**: Check that all required environment variables are set
-3. **Runtime errors**: Check the console output for error messages
-
-### Getting Help
-If you encounter issues:
-1. Check the console output for error messages
-2. Review the API documentation
-3. Check the developer guide for technical details
-
-## FAQ
-**Q: What is this application for?**
-A: {requirements.get('description', 'N/A')}
-
-**Q: How do I customize the application?**
-A: Refer to the developer guide for customization instructions.
-
-**Q: Is this application production-ready?**
-A: This is an automatically generated application and may require additional testing and customization for production use.
-"""
+        saved_docs = self._save_generated_documentation(fallback_docs, project_id)
         
         return {
-            "README.md": readme_content,
-            "API_DOCUMENTATION.md": api_doc_content,
-            "DEVELOPER_GUIDE.md": dev_guide_content,
-            "USER_GUIDE.md": user_guide_content
+            "project_id": project_id,
+            "documentation_files": saved_docs,
+            "documentation_type": "Basic Documentation",
+            "total_documentation_files": len(saved_docs),
+            "readme_files": 1,
+            "api_docs": 0,
+            "user_guides": 1,
+            "developer_docs": 0,
+            "deployment_docs": 0,
+            "documentation_ready": False,
+            "error": error,
+            "fallback_mode": True
         }
     
-    def _get_file_purpose(self, filename: str) -> str:
-        """Get a description of the file's purpose based on its name."""
-        purposes = {
-            "main.py": "Main application entry point",
-            "config.py": "Application configuration and settings",
-            "requirements.txt": "Python package dependencies",
-            "README.md": "Project documentation and overview",
-            "test_": "Test files for the application",
-            "utils": "Utility functions and helpers",
-            "models": "Data models and classes",
-            "api": "API endpoints and handlers"
-        }
+    def _generate_basic_readme(self, specifications: Dict[str, Any]) -> str:
+        """Generate basic README."""
+        project_name = specifications.get("project_overview", {}).get("name", "Generated Application")
+        description = specifications.get("project_overview", {}).get("description", "A generated application")
         
-        for key, purpose in purposes.items():
-            if key in filename.lower():
-                return purpose
-        
-        return "Generated code file" 
+        return f"""# {project_name}
+
+{description}
+
+## Quick Start
+
+1. Clone the repository
+2. Install dependencies
+3. Run the application
+
+## Features
+
+- Basic functionality
+- API endpoints
+- User interface
+
+## License
+
+MIT License
+""" 

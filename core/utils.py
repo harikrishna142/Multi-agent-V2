@@ -23,15 +23,97 @@ def setup_logging(log_level: str = "INFO") -> logging.Logger:
     )
     return logging.getLogger(__name__)
 
-def save_to_file(content: str, filename: str, output_dir: str = "./output") -> str:
-    """Save content to a file in the output directory."""
-    os.makedirs(output_dir, exist_ok=True)
-    filepath = os.path.join(output_dir, filename)
+def ensure_directory_exists(filepath: str) -> str:
+    """
+    Ensure the directory for a filepath exists.
     
+    Args:
+        filepath: Full path to the file
+        
+    Returns:
+        Normalized filepath
+    """
+    # Normalize the path for cross-platform compatibility
+    filepath = os.path.normpath(filepath)
+    
+    # Get the directory part
+    directory = os.path.dirname(filepath)
+    
+    # Create the directory if it doesn't exist
+    if directory:
+        try:
+            os.makedirs(directory, exist_ok=True)
+        except Exception as e:
+            # Use setup_logging to get logger
+            setup_logging().warning(f"Failed to create directory {directory}: {e}")
+    
+    return filepath
+
+
+def save_to_file(content: str, filename: str, output_dir: str = "./output") -> str:
+    """Save content to a file in the output directory with proper path handling."""
+    # Normalize paths for cross-platform compatibility
+    output_dir = os.path.normpath(output_dir)
+    filename = os.path.normpath(filename)
+    
+    # Handle nested file paths (e.g., "frontend/src/components/Component.js")
+    if os.sep in filename or '/' in filename:
+        # Split the filename into directory and file parts
+        file_parts = filename.replace('/', os.sep).split(os.sep)
+        file_name = file_parts[-1]
+        sub_dirs = file_parts[:-1]
+        
+        # Create the full directory path
+        full_dir = os.path.join(output_dir, *sub_dirs)
+        os.makedirs(full_dir, exist_ok=True)
+        
+        # Create the full file path
+        filepath = os.path.join(full_dir, file_name)
+    else:
+        # Simple case - just create the output directory
+        os.makedirs(output_dir, exist_ok=True)
+        filepath = os.path.join(output_dir, filename)
+    
+    # Ensure the directory exists
+    os.makedirs(os.path.dirname(filepath), exist_ok=True)
+    
+    # Write the file
     with open(filepath, 'w', encoding='utf-8') as f:
         f.write(content)
     
     return filepath
+
+
+def safe_save_to_file(content: str, filename: str, output_dir: str = "./output") -> str:
+    """
+    Safely save content to a file with comprehensive error handling.
+    
+    Args:
+        content: Content to save
+        filename: Name of the file (can include subdirectories)
+        output_dir: Base output directory
+        
+    Returns:
+        Full path to the saved file
+    """
+    try:
+        # Use the updated save_to_file function
+        return save_to_file(content, filename, output_dir)
+    except Exception as e:
+        # Get logger for error handling
+        logger = setup_logging()
+        logger.error(f"Error saving file {filename} to {output_dir}: {e}")
+        # Try to save to a fallback location
+        try:
+            fallback_path = os.path.join(output_dir, "fallback", filename.replace(os.sep, "_"))
+            os.makedirs(os.path.dirname(fallback_path), exist_ok=True)
+            with open(fallback_path, 'w', encoding='utf-8') as f:
+                f.write(content)
+            logger.info(f"Saved to fallback location: {fallback_path}")
+            return fallback_path
+        except Exception as fallback_error:
+            logger.error(f"Fallback save also failed: {fallback_error}")
+            raise
 
 def load_from_file(filepath: str) -> str:
     """Load content from a file."""
@@ -39,10 +121,33 @@ def load_from_file(filepath: str) -> str:
         return f.read()
 
 def save_json(data: Dict[str, Any], filename: str, output_dir: str = "./output") -> str:
-    """Save data as JSON file."""
-    os.makedirs(output_dir, exist_ok=True)
-    filepath = os.path.join(output_dir, filename)
+    """Save data as JSON file with proper path handling."""
+    # Normalize paths for cross-platform compatibility
+    output_dir = os.path.normpath(output_dir)
+    filename = os.path.normpath(filename)
     
+    # Handle nested file paths
+    if os.sep in filename or '/' in filename:
+        # Split the filename into directory and file parts
+        file_parts = filename.replace('/', os.sep).split(os.sep)
+        file_name = file_parts[-1]
+        sub_dirs = file_parts[:-1]
+        
+        # Create the full directory path
+        full_dir = os.path.join(output_dir, *sub_dirs)
+        os.makedirs(full_dir, exist_ok=True)
+        
+        # Create the full file path
+        filepath = os.path.join(full_dir, file_name)
+    else:
+        # Simple case - just create the output directory
+        os.makedirs(output_dir, exist_ok=True)
+        filepath = os.path.join(output_dir, filename)
+    
+    # Ensure the directory exists
+    os.makedirs(os.path.dirname(filepath), exist_ok=True)
+    
+    # Write the JSON file
     with open(filepath, 'w', encoding='utf-8') as f:
         json.dump(data, f, indent=2, ensure_ascii=False)
     
@@ -60,20 +165,43 @@ def generate_project_id(requirement: str) -> str:
     return f"project_{timestamp}_{requirement_hash}"
 
 def create_project_structure(project_id: str, output_dir: str = "./output") -> Dict[str, str]:
-    """Create directory structure for a project."""
+    """Create directory structure for a project with proper path handling."""
+    # Normalize paths for cross-platform compatibility
+    output_dir = os.path.normpath(output_dir)
     project_dir = os.path.join(output_dir, project_id)
     
+    # Create comprehensive directory structure
     directories = {
         "root": project_dir,
         "src": os.path.join(project_dir, "src"),
+        "backend": os.path.join(project_dir, "backend"),
+        "frontend": os.path.join(project_dir, "frontend"),
         "tests": os.path.join(project_dir, "tests"),
+        "tests_unit": os.path.join(project_dir, "tests", "unit"),
+        "tests_integration": os.path.join(project_dir, "tests", "integration"),
+        "tests_e2e": os.path.join(project_dir, "tests", "e2e"),
         "docs": os.path.join(project_dir, "docs"),
         "deployment": os.path.join(project_dir, "deployment"),
-        "ui": os.path.join(project_dir, "ui")
+        "ui": os.path.join(project_dir, "ui"),
+        "frontend_src": os.path.join(project_dir, "frontend", "src"),
+        "frontend_components": os.path.join(project_dir, "frontend", "src", "components"),
+        "frontend_tests": os.path.join(project_dir, "frontend", "src", "components", "__tests__"),
+        "backend_api": os.path.join(project_dir, "backend", "api"),
+        "backend_models": os.path.join(project_dir, "backend", "models"),
+        "backend_services": os.path.join(project_dir, "backend", "services"),
+        "config": os.path.join(project_dir, "config"),
+        "scripts": os.path.join(project_dir, "scripts"),
+        "assets": os.path.join(project_dir, "assets"),
+        "static": os.path.join(project_dir, "static"),
+        "templates": os.path.join(project_dir, "templates")
     }
     
+    # Create all directories
     for dir_path in directories.values():
-        os.makedirs(dir_path, exist_ok=True)
+        try:
+            os.makedirs(dir_path, exist_ok=True)
+        except Exception as e:
+            setup_logging().warning(f"Failed to create directory {dir_path}: {e}")
     
     return directories
 
@@ -244,21 +372,21 @@ def extract_llm_response(chat_result) -> str:
     Raises:
         ValueError: If no response is found
     """
-    logger = setup_logging()
-    logger.info(f"Chat history length: {len(chat_result.chat_history)}")
+    setup_logging()
+    setup_logging().info(f"Chat history length: {len(chat_result.chat_history)}")
     
     # Log all messages for debugging
     for i, message in enumerate(chat_result.chat_history):
         role = message.get("role", "unknown")
         content_preview = message.get("content", "")[:100]
-        logger.info(f"Message {i}: role={role}, content_preview={content_preview}...")
+        setup_logging().info(f"Message {i}: role={role}, content_preview={content_preview}...")
     
     # Find the LLM response - it's in the user message (AutoGen structure)
     last_message = None
     for message in reversed(chat_result.chat_history):
         if message.get("role") == "user":
             last_message = message.get("content", "")
-            logger.info(f"Found user message (LLM response) with length: {len(last_message)}")
+            setup_logging().info(f"Found user message (LLM response) with length: {len(last_message)}")
             break
     
     # If no user message found, fall back to assistant message
@@ -266,7 +394,7 @@ def extract_llm_response(chat_result) -> str:
         for message in reversed(chat_result.chat_history):
             if message.get("role") == "assistant":
                 last_message = message.get("content", "")
-                logger.info(f"Found assistant message with length: {len(last_message)}")
+                setup_logging().info(f"Found assistant message with length: {len(last_message)}")
                 break
     
     if not last_message:

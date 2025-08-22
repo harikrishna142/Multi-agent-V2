@@ -1,27 +1,31 @@
 """
-Deployment Configuration Agent for the Multi-Agentic Coding Framework.
-Generates deployment scripts and configuration files for the developed code.
+Enhanced Deployment Agent
+Generates complete deployment configurations for production-ready applications.
 """
 
 import autogen
-import re
+import os
+import json
+import yaml
 from typing import Dict, Any, List
 from core.config import get_agent_config, config
-from core.utils import save_to_file, setup_logging, load_from_file
+from core.utils import save_to_file, setup_logging
 
 logger = setup_logging()
 
-class DeploymentConfigurationAgent:
-    """Agent responsible for generating deployment configurations."""
+class DeploymentAgent:
+    """Enhanced deployment agent that generates complete deployment configurations."""
     
     def __init__(self):
         self.agent_config = get_agent_config("deployment_agent")
         self.llm_config = config.get_llm_config()
         
-        # Create the agent
+        # Create the agent with enhanced system message
+        enhanced_system_message = self._get_system_message()
+        
         self.agent = autogen.AssistantAgent(
             name=self.agent_config["name"],
-            system_message=self.agent_config["system_message"],
+            system_message=enhanced_system_message,
             llm_config=self.llm_config
         )
         
@@ -35,102 +39,85 @@ class DeploymentConfigurationAgent:
             llm_config=self.llm_config
         )
     
-    def generate_deployment_config(self, generated_code: Dict[str, Any], requirements: Dict[str, Any], project_id: str) -> Dict[str, Any]:
+    def _get_system_message(self) -> str:
+        """Get system message for deployment configuration generation."""
+        return """You are a helpful deployment configuration generator that creates basic deployment files for simple applications. You generate straightforward deployment configurations that can be used to run applications.
+
+## YOUR ROLE:
+- Generate basic deployment configurations
+- Create simple Docker files
+- Write basic docker-compose files
+- Generate simple Kubernetes manifests
+- Create basic CI/CD configurations
+- Generate simple deployment scripts
+
+## DEPLOYMENT GENERATION PROCESS:
+1. **Analyze the application structure** and technology stack
+2. **Create basic Docker configurations** for simple deployment
+3. **Generate simple docker-compose files** for local development
+4. **Write basic Kubernetes manifests** (if needed)
+5. **Create simple CI/CD configurations**
+6. **Generate basic deployment scripts**
+
+## DEPLOYMENT REQUIREMENTS:
+
+### 1. **Containerization**:
+- Simple Dockerfile for the application
+- Basic multi-stage builds (if needed)
+- Simple environment configurations
+- Basic health checks
+
+### 2. **Orchestration**:
+- Simple docker-compose files
+- Basic service configurations
+- Simple networking setup
+- Basic volume management
+
+### 3. **CI/CD Pipeline**:
+- Simple GitHub Actions workflows
+- Basic build and test steps
+- Simple deployment steps
+- Basic error handling
+
+### 4. **Configuration Files**:
+- Simple environment files
+- Basic configuration templates
+- Simple deployment scripts
+- Basic documentation
+
+## IMPORTANT GUIDELINES:
+
+✅ **Create simple, basic deployment files**
+✅ **Focus on local development and simple deployment**
+✅ **Use basic, well-known tools**
+✅ **Generate runnable configurations**
+✅ **Keep deployment simple**
+
+❌ **Do not create complex production deployments**
+❌ **Do not require advanced infrastructure**
+❌ **Do not generate enterprise-level configurations**
+❌ **Do not create complex orchestration**
+
+**YOUR TASK**: Generate basic deployment configurations for the application that can be used to run and deploy it.
+
+End your response with "TERMINATE" to indicate completion."""
+    
+    def generate_deployment(self, specifications: Dict[str, Any], generated_files: Dict[str, Any], project_id: str) -> Dict[str, Any]:
         """
-        Generate deployment configuration for the developed code.
+        Generate complete deployment configurations for the application.
         
         Args:
-            generated_code: Output from CodingAgent containing generated files
-            requirements: Original requirements for context
+            specifications: Technical specifications from RequirementAgent
+            generated_files: Generated code files from CodingAgent
             project_id: Unique project identifier
             
         Returns:
-            Dict containing generated deployment files
+            Dict containing deployment configurations and metadata
         """
-        logger.info("Starting deployment configuration generation")
+        logger.info("Starting complete deployment generation")
         
-        # Load the actual code content
-        code_files = {}
-        for filename, filepath in generated_code.get("generated_files", {}).items():
-            try:
-                code_files[filename] = load_from_file(filepath)
-            except Exception as e:
-                logger.warning(f"Could not load file {filename}: {e}")
-                code_files[filename] = f"# Error loading file: {e}"
-        
-        # Create the deployment prompt
-        deployment_prompt = f"""
-Please generate comprehensive deployment configuration for the following Python project:
-
-PROJECT REQUIREMENTS:
-{self._format_requirements_for_deployment(requirements)}
-
-GENERATED CODE FILES:
-{self._format_code_for_deployment(code_files)}
-
-Please generate the following deployment files:
-
-1. **Docker Configuration** (`Dockerfile`):
-   - Multi-stage build if appropriate
-   - Proper Python environment setup
-   - Security best practices
-   - Optimized for production
-
-2. **Docker Compose** (`docker-compose.yml`):
-   - Service definitions
-   - Environment variables
-   - Volume mounts
-   - Network configuration
-
-3. **Deployment Scripts** (`deploy.sh`, `deploy.ps1`):
-   - Linux/Unix deployment script
-   - Windows PowerShell deployment script
-   - Environment setup
-   - Service installation
-
-4. **CI/CD Configuration** (`.github/workflows/deploy.yml`):
-   - GitHub Actions workflow
-   - Automated testing
-   - Build and deployment pipeline
-
-5. **Environment Configuration** (`.env.example`, `config.prod.yaml`):
-   - Environment variable templates
-   - Production configuration
-   - Security considerations
-
-6. **Monitoring Configuration** (`monitoring.yml`, `logging.conf`):
-   - Logging configuration
-   - Health check endpoints
-   - Monitoring setup
-
-7. **Kubernetes Configuration** (`k8s/`):
-   - Deployment manifests
-   - Service definitions
-   - ConfigMaps and Secrets
-
-For each file, provide:
-- Production-ready configuration
-- Security best practices
-- Scalability considerations
-- Monitoring and logging
-- Error handling and recovery
-
-Please provide each file in the following format:
-
-```dockerfile
-# filename: Dockerfile
-[complete configuration here]
-```
-
-```yaml
-# filename: docker-compose.yml
-[complete configuration here]
-```
-
-And so on for each file.
-
-IMPORTANT: End your response with the word "TERMINATE" to indicate completion.
-"""
+        # Create detailed deployment generation prompt
+        deployment_prompt = self._create_deployment_generation_prompt(specifications, generated_files)
         
         try:
             # Start the conversation
@@ -139,632 +126,512 @@ IMPORTANT: End your response with the word "TERMINATE" to indicate completion.
                 message=deployment_prompt
             )
             
-            # Extract the LLM response using utility function
+            # Extract the LLM response
             from core.utils import extract_llm_response
             last_message = extract_llm_response(chat_result)
             
-            # Parse and organize the generated deployment configs
-            generated_configs = self._parse_generated_deployment_configs(last_message)
+            # Extract and process all generated deployment files
+            generated_deployments = self._parse_generated_deployments(last_message)
             
-            # Validate and enhance the configurations
-            validated_configs = self._validate_and_enhance_configs(generated_configs, requirements)
+            # Validate and enhance the generated deployments
+            validated_deployments = self._validate_and_enhance_deployments(generated_deployments)
             
-            # Save the generated configurations
-            saved_configs = self._save_generated_configs(validated_configs, project_id)
+            # Save all deployment files
+            saved_deployments = self._save_generated_deployments(validated_deployments, project_id)
+            
+            # Generate additional deployment configuration files
+            config_files = self._generate_deployment_configuration(specifications, project_id)
+            saved_deployments.update(config_files)
             
             result = {
                 "project_id": project_id,
-                "generated_configs": saved_configs,
-                "total_configs": len(saved_configs),
-                "deployment_summary": self._generate_deployment_summary(saved_configs)
+                "deployment_files": saved_deployments,
+                "deployment_type": self._determine_deployment_type(specifications),
+                "technology_stack": specifications.get("project_overview", {}).get("technology_stack", {}),
+                "total_deployment_files": len(saved_deployments),
+                "docker_files": len([f for f in saved_deployments.keys() if "docker" in f.lower()]),
+                "kubernetes_files": len([f for f in saved_deployments.keys() if "k8s" in f or "kubernetes" in f]),
+                "ci_cd_files": len([f for f in saved_deployments.keys() if "workflow" in f or "pipeline" in f]),
+                "monitoring_files": len([f for f in saved_deployments.keys() if "prometheus" in f or "grafana" in f]),
+                "deployment_ready": True
             }
             
-            logger.info(f"Deployment configuration generation completed. Generated {len(saved_configs)} configuration files.")
+            logger.info(f"Complete deployment generation finished. Generated {len(saved_deployments)} deployment files.")
             return result
             
         except Exception as e:
-            logger.error(f"Error in deployment configuration generation: {e}")
-            # Generate fallback deployment configs
-            fallback_configs = self._generate_fallback_deployment_configs(requirements, code_files, project_id)
-            return {
-                "project_id": project_id,
-                "generated_configs": fallback_configs,
-                "total_configs": len(fallback_configs),
-                "deployment_summary": "Fallback deployment configuration generated",
-                "error": str(e)
-            }
+            logger.error(f"Error in deployment generation: {e}")
+            return self._generate_fallback_deployment(specifications, project_id, str(e))
     
-    def _format_requirements_for_deployment(self, requirements: Dict[str, Any]) -> str:
-        """Format requirements for deployment context."""
-        formatted = f"""
-Project: {requirements.get('project_name', 'N/A')}
-Description: {requirements.get('description', 'N/A')}
+    def _create_deployment_generation_prompt(self, specifications: Dict[str, Any], generated_files: Dict[str, Any]) -> str:
+        """Create detailed deployment generation prompt."""
+        
+        # Extract key information from specifications
+        project_overview = specifications.get("project_overview", {})
+        functional_reqs = specifications.get("functional_requirements", [])
+        architecture = specifications.get("architecture", {})
+        
+        tech_stack = project_overview.get("technology_stack", {})
+        backend_stack = tech_stack.get("backend", {})
+        frontend_stack = tech_stack.get("frontend", {})
+        deployment_stack = tech_stack.get("deployment", {})
+        
+        prompt = f"""
+Generate complete deployment configurations for the following application:
 
-Deployment Requirements:
+## PROJECT OVERVIEW:
+- Name: {project_overview.get('name', 'Generated Application')}
+- Description: {project_overview.get('description', 'N/A')}
+- Backend: {backend_stack.get('framework', 'FastAPI')}
+- Frontend: {frontend_stack.get('framework', 'React')}
+- Database: {backend_stack.get('database', 'PostgreSQL')}
+
+## FUNCTIONAL REQUIREMENTS:
 """
         
-        for req in requirements.get('functional_requirements', []):
-            formatted += f"""
+        for req in functional_reqs:
+            prompt += f"""
 - {req.get('id', 'N/A')}: {req.get('title', 'N/A')}
   Description: {req.get('description', 'N/A')}
-  Deployment Impact: Consider deployment requirements for {req.get('description', 'N/A')}
+  Priority: {req.get('priority', 'N/A')}
 """
         
-        formatted += f"""
-Non-Functional Requirements:
+        prompt += f"""
+## ARCHITECTURE:
+{json.dumps(architecture, indent=2)}
+
+## GENERATED CODE FILES:
+The following code has been generated for this project. Please create deployment configurations based on the actual implementation:
+
 """
         
-        for req in requirements.get('non_functional_requirements', []):
-            formatted += f"""
-- {req.get('id', 'N/A')}: {req.get('title', 'N/A')}
-  Category: {req.get('category', 'N/A')}
-  Description: {req.get('description', 'N/A')}
-  Deployment Consideration: Ensure {req.get('category', 'N/A')} requirements are met
-"""
-        
-        formatted += f"""
-Technical Constraints: {', '.join(requirements.get('technical_constraints', []))}
-Dependencies: {', '.join(requirements.get('dependencies', []))}
-Architecture: {requirements.get('suggested_architecture', 'N/A')}
-Complexity: {requirements.get('estimated_complexity', 'N/A')}
-"""
-        
-        return formatted
-    
-    def _format_code_for_deployment(self, code_files: Dict[str, str]) -> str:
-        """Format code files for deployment generation."""
-        formatted = ""
-        
-        for filename, content in code_files.items():
-            formatted += f"""
-=== FILE: {filename} ===
+        # Add generated files to the prompt
+        for filename, content in generated_files.items():
+            prompt += f"""
+### {filename}:
+```{self._get_file_extension(filename)}
 {content}
-=== END FILE: {filename} ===
-
+```
 """
         
-        return formatted
+        prompt += """
+## DEPLOYMENT GENERATION REQUIREMENTS:
+
+Please generate the following deployment files:
+
+1. **Dockerfile** - Container configuration for the application
+2. **docker-compose.yml** - Multi-service orchestration
+3. **Kubernetes manifests** - K8s deployment configurations
+4. **CI/CD pipelines** - GitHub Actions or GitLab CI
+5. **Environment configurations** - Environment variables and configs
+
+For each file, provide:
+- Complete configuration with all necessary settings
+- Environment-specific configurations
+- Health checks and monitoring
+- Security best practices
+- Production-ready settings
+
+IMPORTANT: Generate deployment configurations that match the actual code implementation.
+
+Please generate the complete deployment configuration with all required files and full implementation.
+
+IMPORTANT: End your response with "TERMINATE" to indicate completion.
+"""
+        
+        return prompt
     
-    def _parse_generated_deployment_configs(self, response: str) -> Dict[str, str]:
-        """Parse the generated deployment configuration response and extract individual files."""
+    def _parse_generated_deployments(self, response: str) -> Dict[str, str]:
+        """Parse generated deployment files from the response."""
         import re
         
-        files = {}
+        deployments = {}
         
-        # Look for filename patterns in the response
-        filename_pattern = r'# filename: ([^\n]+)'
-        filename_matches = re.findall(filename_pattern, response)
+        # Extract code blocks with filenames
+        code_blocks = re.findall(r'```(\w+)\s*# filename: ([^\n]+)\s*(.*?)```', response, re.DOTALL)
         
-        # Split the response by filename markers
-        sections = re.split(r'# filename:', response)
+        for language, filename, content in code_blocks:
+            deployments[filename] = content.strip()
         
-        if len(sections) > 1:
-            for i, section in enumerate(sections[1:], 1):
-                if i <= len(filename_matches):
-                    filename = filename_matches[i-1].strip()
-                    # Extract content after the filename
-                    content = section.strip()
-                    if content:
-                        files[filename] = content
-        else:
-            # Fallback: create basic deployment structure
-            files = self._create_basic_deployment_structure(response)
+        # Also look for code blocks without explicit filenames
+        if not deployments:
+            code_blocks = re.findall(r'```(\w+)\s*(.*?)```', response, re.DOTALL)
+            for i, (language, content) in enumerate(code_blocks):
+                if language in ['yaml', 'yml', 'dockerfile', 'nginx', 'json']:
+                    # Try to infer filename from content
+                    filename = self._infer_deployment_filename(content, language, i)
+                    deployments[filename] = content.strip()
         
-        return files
+        return deployments
     
-    def _create_basic_deployment_structure(self, response: str) -> Dict[str, str]:
-        """Create basic deployment structure when parsing fails."""
-        return {
-            "Dockerfile": f"""# Basic Dockerfile for Python application
-FROM python:3.9-slim
+    def _infer_deployment_filename(self, content: str, language: str, index: int) -> str:
+        """Infer deployment filename from content."""
+        if language == 'yaml' or language == 'yml':
+            if 'version:' in content and 'services:' in content:
+                return f"docker-compose.prod.yml"
+            elif 'apiVersion:' in content and 'kind:' in content:
+                return f"k8s/deployment-{index}.yaml"
+            elif 'name:' in content and 'on:' in content:
+                return f".github/workflows/deploy.yml"
+            else:
+                return f"deployment-{index}.yml"
+        elif language == 'dockerfile':
+            return f"Dockerfile.{index}"
+        elif language == 'nginx':
+            return f"nginx/nginx.conf"
+        elif language == 'json':
+            return f"config-{index}.json"
+        else:
+            return f"deployment-{index}.{language}"
+    
+    def _get_file_extension(self, filename: str) -> str:
+        """Get appropriate file extension for a filename."""
+        if filename.endswith('.py'):
+            return 'python'
+        elif filename.endswith('.js'):
+            return 'javascript'
+        elif filename.endswith('.html'):
+            return 'html'
+        elif filename.endswith('.css'):
+            return 'css'
+        elif filename.endswith('.json'):
+            return 'json'
+        elif filename.endswith('.yml') or filename.endswith('.yaml'):
+            return 'yaml'
+        elif filename.endswith('.sql'):
+            return 'sql'
+        elif filename.endswith('.md'):
+            return 'markdown'
+        else:
+            return 'text'
+    
+    def _validate_and_enhance_deployments(self, deployments: Dict[str, str]) -> Dict[str, str]:
+        """Validate and enhance the generated deployments."""
+        enhanced_deployments = {}
+        
+        for filename, content in deployments.items():
+            # Basic validation for YAML files
+            if filename.endswith(('.yml', '.yaml')):
+                try:
+                    import yaml
+                    yaml.safe_load(content)
+                    enhanced_deployments[filename] = content
+                except Exception as e:
+                    logger.warning(f"YAML validation failed for {filename}: {e}")
+                    enhanced_deployments[filename] = content
+            else:
+                enhanced_deployments[filename] = content
+        
+        return enhanced_deployments
+    
+    def _save_generated_deployments(self, deployments: Dict[str, str], project_id: str) -> Dict[str, str]:
+        """Save generated deployment files and return content."""
+        try:
+            saved_deployments = {}
+            project_dir = f"output/deployment/{project_id}"
+            os.makedirs(project_dir, exist_ok=True)
+            
+            for filename, content in deployments.items():
+                # Use save_to_file with correct parameters: (content, filename, output_dir)
+                file_path = save_to_file(content, filename, project_dir)
+                saved_deployments[filename] = file_path
+                logger.info(f"Saved deployment file: {file_path}")
+            
+            return saved_deployments
+            
+        except Exception as e:
+            logger.error(f"Error saving deployment files: {e}")
+            return {}
+    
+    def _generate_deployment_configuration(self, specifications: Dict[str, Any],project_id: str) -> Dict[str, str]:
+        """Generate additional deployment configuration files."""
+        config_files = {}
+        
+        # Generate environment file
+        env_file = self._generate_env_file(specifications)
+        config_files[".env.production"] = env_file
+        
+        # Generate deployment script
+        deploy_script = self._generate_deploy_script(specifications)
+        config_files["deploy.sh"] = deploy_script
+        
+        # Generate monitoring configuration
+        monitoring_config = self._generate_monitoring_config(specifications)
+        config_files["monitoring/prometheus.yml"] = monitoring_config
+        
+        return config_files
+    
+    def _generate_env_file(self, specifications: Dict[str, Any]) -> str:
+        """Generate production environment file."""
+        return """# Production Environment Variables
+# Database Configuration
+DATABASE_URL=postgresql://postgres:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+POSTGRES_DB=app_production
+POSTGRES_USER=postgres
+POSTGRES_PASSWORD=your-secure-password-here
 
-# Set working directory
-WORKDIR /app
+# Redis Configuration
+REDIS_URL=redis://redis:6379
+REDIS_PASSWORD=your-redis-password-here
 
-# Copy requirements first for better caching
-COPY requirements.txt .
+# Application Configuration
+SECRET_KEY=your-super-secret-key-change-in-production
+DEBUG=False
+LOG_LEVEL=INFO
+ENVIRONMENT=production
 
-# Install dependencies
-RUN pip install --no-cache-dir -r requirements.txt
+# Frontend Configuration
+REACT_APP_API_URL=https://api.myapp.com
+REACT_APP_ENVIRONMENT=production
 
-# Copy application code
-COPY . .
+# Monitoring Configuration
+GRAFANA_PASSWORD=your-grafana-password-here
+PROMETHEUS_RETENTION_DAYS=30
 
-# Create non-root user
-RUN useradd -m -u 1000 appuser && chown -R appuser:appuser /app
-USER appuser
+# External Services
+PAYMENT_API_KEY=your-payment-api-key
+EMAIL_SERVICE_API_KEY=your-email-api-key
+SMS_SERVICE_API_KEY=your-sms-api-key
 
-# Expose port
-EXPOSE 8000
+# Security Configuration
+SSL_CERT_PATH=/etc/nginx/ssl/cert.pem
+SSL_KEY_PATH=/etc/nginx/ssl/key.pem
+"""
+    
+    def _generate_deploy_script(self, specifications: Dict[str, Any]) -> str:
+        """Generate deployment script."""
+        return """#!/bin/bash
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 \\
-  CMD python -c "import requests; requests.get('http://localhost:8000/health')" || exit 1
-
-# Run the application
-CMD ["python", "main.py"]
-""",
-            "docker-compose.yml": f"""version: '3.8'
-
-services:
-  app:
-    build: .
-    ports:
-      - "8000:8000"
-    environment:
-      - DEBUG=False
-      - ENVIRONMENT=production
-    volumes:
-      - ./logs:/app/logs
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "python", "-c", "import requests; requests.get('http://localhost:8000/health')"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 40s
-
-  nginx:
-    image: nginx:alpine
-    ports:
-      - "80:80"
-    volumes:
-      - ./nginx.conf:/etc/nginx/nginx.conf
-    depends_on:
-      - app
-    restart: unless-stopped
-""",
-            "deploy.sh": f"""#!/bin/bash
-
-# Deployment script for Python application
-
+# Production Deployment Script
 set -e
 
-echo "Starting deployment..."
+echo "🚀 Starting production deployment..."
 
-# Check if Docker is installed
-if ! command -v docker &> /dev/null; then
-    echo "Docker is not installed. Please install Docker first."
+# Load environment variables
+if [ -f .env.production ]; then
+    export $(cat .env.production | grep -v '^#' | xargs)
+fi
+
+# Check if Docker is running
+if ! docker info > /dev/null 2>&1; then
+    echo "❌ Docker is not running. Please start Docker and try again."
     exit 1
 fi
 
-# Check if Docker Compose is installed
-if ! command -v docker-compose &> /dev/null; then
-    echo "Docker Compose is not installed. Please install Docker Compose first."
-    exit 1
-fi
+# Build and push images
+echo "📦 Building and pushing Docker images..."
 
-# Build and start the application
-echo "Building and starting the application..."
-docker-compose up -d --build
+# Build backend image
+docker build -t myapp/backend:latest ./backend
+docker push myapp/backend:latest
 
-# Wait for the application to be ready
-echo "Waiting for application to be ready..."
+# Build frontend image
+docker build -t myapp/frontend:latest ./frontend
+docker push myapp/frontend:latest
+
+# Deploy with Docker Compose
+echo "🚀 Deploying application..."
+
+# Stop existing containers
+docker-compose -f docker-compose.prod.yml down
+
+# Pull latest images
+docker-compose -f docker-compose.prod.yml pull
+
+# Start services
+docker-compose -f docker-compose.prod.yml up -d
+
+# Wait for services to be healthy
+echo "⏳ Waiting for services to be healthy..."
 sleep 30
 
-# Check if the application is running
-if curl -f http://localhost:8000/health; then
-    echo "Deployment successful!"
+# Check service health
+echo "🔍 Checking service health..."
+
+# Check backend health
+if curl -f http://localhost:8000/health > /dev/null 2>&1; then
+    echo "✅ Backend is healthy"
 else
-    echo "Deployment failed. Application is not responding."
+    echo "❌ Backend health check failed"
     exit 1
 fi
 
-echo "Deployment completed successfully!"
-""",
-            ".env.example": f"""# Environment variables for the application
-# Copy this file to .env and update the values
+# Check frontend health
+if curl -f http://localhost:3000 > /dev/null 2>&1; then
+    echo "✅ Frontend is healthy"
+else
+    echo "❌ Frontend health check failed"
+    exit 1
+fi
 
-# Application settings
-DEBUG=False
-ENVIRONMENT=production
-LOG_LEVEL=INFO
+# Check database health
+if docker-compose -f docker-compose.prod.yml exec -T db pg_isready -U postgres > /dev/null 2>&1; then
+    echo "✅ Database is healthy"
+else
+    echo "❌ Database health check failed"
+    exit 1
+fi
 
-# Database settings (if applicable)
-# DATABASE_URL=postgresql://user:password@localhost:5432/dbname
+echo "🎉 Deployment completed successfully!"
+echo "📊 Application is available at:"
+echo "   - Frontend: http://localhost:3000"
+echo "   - Backend API: http://localhost:8000"
+echo "   - API Documentation: http://localhost:8000/docs"
+echo "   - Grafana: http://localhost:3001"
+echo "   - Prometheus: http://localhost:9090"
 
-# API keys (if applicable)
-# API_KEY=your_api_key_here
-
-# Security settings
-SECRET_KEY=your_secret_key_here
-ALLOWED_HOSTS=localhost,127.0.0.1
-
-# Performance settings
-WORKERS=4
-MAX_CONNECTIONS=100
+# Show running containers
+echo "📋 Running containers:"
+docker-compose -f docker-compose.prod.yml ps
 """
+    
+    def _generate_monitoring_config(self, specifications: Dict[str, Any]) -> str:
+        """Generate Prometheus monitoring configuration."""
+        return """global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+rule_files:
+  # - "first_rules.yml"
+  # - "second_rules.yml"
+
+scrape_configs:
+  # Prometheus itself
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+
+  # Backend application
+  - job_name: 'backend'
+    static_configs:
+      - targets: ['backend:8000']
+    metrics_path: '/metrics'
+    scrape_interval: 10s
+
+  # Frontend application (if it exposes metrics)
+  - job_name: 'frontend'
+    static_configs:
+      - targets: ['frontend:3000']
+    metrics_path: '/metrics'
+    scrape_interval: 10s
+
+  # Database (if using postgres_exporter)
+  - job_name: 'postgres'
+    static_configs:
+      - targets: ['postgres-exporter:9187']
+    scrape_interval: 30s
+
+  # Redis (if using redis_exporter)
+  - job_name: 'redis'
+    static_configs:
+      - targets: ['redis-exporter:9121']
+    scrape_interval: 30s
+
+  # Nginx (if using nginx_exporter)
+  - job_name: 'nginx'
+    static_configs:
+      - targets: ['nginx-exporter:9113']
+    scrape_interval: 30s
+
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets:
+          # - alertmanager:9093
+"""
+    
+    def _determine_deployment_type(self, specifications: Dict[str, Any]) -> str:
+        """Determine the type of deployment generated."""
+        tech_stack = specifications.get("project_overview", {}).get("technology_stack", {})
+        deployment_stack = tech_stack.get("deployment", {})
+        
+        if deployment_stack.get("orchestration") == "Kubernetes":
+            return "Kubernetes Deployment"
+        elif deployment_stack.get("orchestration") == "Docker Compose":
+            return "Docker Compose Deployment"
+        else:
+            return "Multi-Platform Deployment"
+    
+    def _generate_fallback_deployment(self, specifications: Dict[str, Any], 
+                                     project_id: str, error: str) -> Dict[str, Any]:
+        """Generate fallback deployment when generation fails."""
+        fallback_deployments = {
+            "docker-compose.yml": self._generate_basic_docker_compose(),
+            "Dockerfile": self._generate_basic_dockerfile(),
+            ".env.example": self._generate_basic_env_file(),
+            "README.md": "# Deployment\n\nBasic deployment configuration generated as fallback."
+        }
+        
+        saved_deployments = self._save_generated_deployments(fallback_deployments, project_id)
+        
+        return {
+            "project_id": project_id,
+            "deployment_files": saved_deployments,
+            "deployment_type": "Basic Deployment",
+            "technology_stack": {},
+            "total_deployment_files": len(saved_deployments),
+            "docker_files": 2,
+            "kubernetes_files": 0,
+            "ci_cd_files": 0,
+            "monitoring_files": 0,
+            "deployment_ready": False,
+            "error": error,
+            "fallback_mode": True
         }
     
-    def _validate_and_enhance_configs(self, configs: Dict[str, str], requirements: Dict[str, Any]) -> Dict[str, str]:
-        """Validate and enhance the generated deployment configurations."""
-        enhanced_configs = {}
-        
-        for filename, content in configs.items():
-            # Enhance the configuration based on requirements
-            enhanced_content = self._enhance_deployment_config(content, filename, requirements)
-            enhanced_configs[filename] = enhanced_content
-        
-        return enhanced_configs
-    
-    def _enhance_deployment_config(self, content: str, filename: str, requirements: Dict[str, Any]) -> str:
-        """Enhance deployment configuration with additional features."""
-        enhanced = content
-        
-        # Add security headers if it's a web application
-        if "nginx" in filename.lower() or "web" in filename.lower():
-            enhanced += """
-
-# Security headers
-add_header X-Frame-Options "SAMEORIGIN" always;
-add_header X-Content-Type-Options "nosniff" always;
-add_header X-XSS-Protection "1; mode=block" always;
-add_header Referrer-Policy "strict-origin-when-cross-origin" always;
-"""
-        
-        # Add monitoring if it's a Docker Compose file
-        if "docker-compose" in filename.lower():
-            enhanced += """
-  # Monitoring service (optional)
-  prometheus:
-    image: prom/prometheus:latest
-    ports:
-      - "9090:9090"
-    volumes:
-      - ./prometheus.yml:/etc/prometheus/prometheus.yml
-    restart: unless-stopped
-"""
-        
-        return enhanced
-    
-    def _save_generated_configs(self, configs: Dict[str, str], project_id: str) -> Dict[str, str]:
-        """Save generated deployment configurations to files and return content."""
-        saved_configs = {}
-        
-        for filename, content in configs.items():
-            # Create project-specific deployment directory
-            project_dir = f"{config.output_dir}/{project_id}/deployment"
-            filepath = save_to_file(content, filename, project_dir)
-            # Return the content, not the filepath, for frontend display
-            saved_configs[filename] = content
-        
-        return saved_configs
-    
-    def _generate_deployment_summary(self, saved_configs: Dict[str, str]) -> str:
-        """Generate a summary of the created deployment configurations."""
-        summary = f"""
-# Deployment Configuration Summary
-
-Generated {len(saved_configs)} deployment configuration files:
-
-"""
-        
-        for filename, filepath in saved_configs.items():
-            summary += f"- **{filename}**: {filepath}\n"
-        
-        summary += f"""
-## Deployment Options Available
-
-### Docker Deployment
-- Use `Dockerfile` for containerized deployment
-- Use `docker-compose.yml` for multi-service deployment
-- Run `./deploy.sh` for automated deployment
-
-### Environment Configuration
-- Copy `.env.example` to `.env` and configure
-- Update environment variables for your deployment
-
-### Manual Deployment
-1. Install dependencies: `pip install -r requirements.txt`
-2. Set environment variables
-3. Run the application: `python main.py`
-
-## Next Steps
-1. Review and customize the deployment configurations
-2. Update environment variables and secrets
-3. Test the deployment in a staging environment
-4. Configure monitoring and logging
-5. Set up CI/CD pipeline if needed
-
-## Security Considerations
-- Update default passwords and secrets
-- Configure firewall rules
-- Enable HTTPS in production
-- Set up proper logging and monitoring
-- Regular security updates
-"""
-        
-        return summary
-    
-    def _generate_fallback_deployment_configs(self, requirements: Dict[str, Any], code_files: Dict[str, str], project_id: str) -> Dict[str, str]:
-        """Generate basic fallback deployment configurations when the main generation fails."""
-        project_name = requirements.get('project_name', 'GeneratedProject').replace(' ', '_')
-        
-        dockerfile = f"""# Dockerfile for {project_name}
-FROM python:3.9-slim
-
-# Set working directory
-WORKDIR /app
-
-# Install system dependencies
-RUN apt-get update && apt-get install -y \\
-    gcc \\
-    && rm -rf /var/lib/apt/lists/*
-
-# Copy requirements first for better caching
-COPY requirements.txt .
-
-# Install Python dependencies
-RUN pip install --no-cache-dir -r requirements.txt
-
-# Copy application code
-COPY . .
-
-# Create non-root user for security
-RUN useradd -m -u 1000 appuser && chown -R appuser:appuser /app
-USER appuser
-
-# Expose port
-EXPOSE 8000
-
-# Health check
-HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 \\
-  CMD python -c "print('Health check passed')" || exit 1
-
-# Run the application
-CMD ["python", "main.py"]
-"""
-        
-        docker_compose = f"""version: '3.8'
+    def _generate_basic_docker_compose(self) -> str:
+        """Generate basic Docker Compose configuration."""
+        return """version: '3.8'
 
 services:
-  {project_name.lower()}:
-    build: .
+  backend:
+    build: ./backend
     ports:
       - "8000:8000"
     environment:
-      - DEBUG=False
-      - ENVIRONMENT=production
-      - PROJECT_NAME={project_name}
-    volumes:
-      - ./logs:/app/logs
-      - ./data:/app/data
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "python", "-c", "print('Health check passed')"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 40s
-
-  # Optional: Add a reverse proxy
-  nginx:
-    image: nginx:alpine
-    ports:
-      - "80:80"
-    volumes:
-      - ./nginx.conf:/etc/nginx/nginx.conf
+      - DATABASE_URL=postgresql://postgres:password@db:5432/app_db
     depends_on:
-      - {project_name.lower()}
-    restart: unless-stopped
-    profiles:
-      - production
+      - db
+
+  frontend:
+    build: ./frontend
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend
+
+  db:
+    image: postgres:15
+    environment:
+      - POSTGRES_DB=app_db
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=password
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+volumes:
+  postgres_data:
 """
-        
-        deploy_sh = f"""#!/bin/bash
+    
+    def _generate_basic_dockerfile(self) -> str:
+        """Generate basic Dockerfile."""
+        return """FROM python:3.11-slim
 
-# Deployment script for {project_name}
+WORKDIR /app
 
-set -e
+COPY requirements.txt .
+RUN pip install -r requirements.txt
 
-echo "Starting deployment of {project_name}..."
+COPY . .
 
-# Colors for output
-RED='\\033[0;31m'
-GREEN='\\033[0;32m'
-YELLOW='\\033[1;33m'
-NC='\\033[0m' # No Color
-
-# Function to print colored output
-print_status() {{
-    echo -e "${{GREEN}}[INFO]${{NC}} $1"
-}}
-
-print_warning() {{
-    echo -e "${{YELLOW}}[WARNING]${{NC}} $1"
-}}
-
-print_error() {{
-    echo -e "${{RED}}[ERROR]${{NC}} $1"
-}}
-
-# Check prerequisites
-print_status "Checking prerequisites..."
-
-# Check if Docker is installed
-if ! command -v docker &> /dev/null; then
-    print_error "Docker is not installed. Please install Docker first."
-    exit 1
-fi
-
-# Check if Docker Compose is installed
-if ! command -v docker-compose &> /dev/null; then
-    print_error "Docker Compose is not installed. Please install Docker Compose first."
-    exit 1
-fi
-
-# Check if .env file exists
-if [ ! -f .env ]; then
-    print_warning ".env file not found. Creating from .env.example..."
-    if [ -f .env.example ]; then
-        cp .env.example .env
-        print_warning "Please update .env file with your configuration."
-    else
-        print_error ".env.example file not found. Please create .env file manually."
-        exit 1
-    fi
-fi
-
-# Stop existing containers
-print_status "Stopping existing containers..."
-docker-compose down || true
-
-# Build and start the application
-print_status "Building and starting the application..."
-docker-compose up -d --build
-
-# Wait for the application to be ready
-print_status "Waiting for application to be ready..."
-sleep 30
-
-# Check if the application is running
-print_status "Checking application health..."
-if curl -f http://localhost:8000/health 2>/dev/null || python -c "print('Health check passed')" 2>/dev/null; then
-    print_status "Deployment successful!"
-    print_status "Application is running on http://localhost:8000"
-else
-    print_error "Deployment failed. Application is not responding."
-    print_status "Checking container logs..."
-    docker-compose logs
-    exit 1
-fi
-
-print_status "Deployment completed successfully!"
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
 """
-        
-        deploy_ps1 = f"""# PowerShell deployment script for {project_name}
-
-param(
-    [string]$Environment = "production"
-)
-
-Write-Host "Starting deployment of {project_name}..." -ForegroundColor Green
-
-# Check if Docker is installed
-try {{
-    docker --version | Out-Null
-    Write-Host "Docker is installed." -ForegroundColor Green
-}} catch {{
-    Write-Host "Docker is not installed. Please install Docker first." -ForegroundColor Red
-    exit 1
-}}
-
-# Check if Docker Compose is installed
-try {{
-    docker-compose --version | Out-Null
-    Write-Host "Docker Compose is installed." -ForegroundColor Green
-}} catch {{
-    Write-Host "Docker Compose is not installed. Please install Docker Compose first." -ForegroundColor Red
-    exit 1
-}}
-
-# Check if .env file exists
-if (-not (Test-Path ".env")) {{
-    Write-Host ".env file not found. Creating from .env.example..." -ForegroundColor Yellow
-    if (Test-Path ".env.example") {{
-        Copy-Item ".env.example" ".env"
-        Write-Host "Please update .env file with your configuration." -ForegroundColor Yellow
-    }} else {{
-        Write-Host ".env.example file not found. Please create .env file manually." -ForegroundColor Red
-        exit 1
-    }}
-}}
-
-# Stop existing containers
-Write-Host "Stopping existing containers..." -ForegroundColor Green
-docker-compose down
-
-# Build and start the application
-Write-Host "Building and starting the application..." -ForegroundColor Green
-docker-compose up -d --build
-
-# Wait for the application to be ready
-Write-Host "Waiting for application to be ready..." -ForegroundColor Green
-Start-Sleep -Seconds 30
-
-# Check if the application is running
-Write-Host "Checking application health..." -ForegroundColor Green
-try {{
-    Invoke-WebRequest -Uri "http://localhost:8000/health" -UseBasicParsing | Out-Null
-    Write-Host "Deployment successful!" -ForegroundColor Green
-    Write-Host "Application is running on http://localhost:8000" -ForegroundColor Green
-}} catch {{
-    Write-Host "Deployment failed. Application is not responding." -ForegroundColor Red
-    Write-Host "Checking container logs..." -ForegroundColor Green
-    docker-compose logs
-    exit 1
-}}
-
-Write-Host "Deployment completed successfully!" -ForegroundColor Green
-"""
-        
-        env_example = f"""# Environment variables for {project_name}
-# Copy this file to .env and update the values
-
-# Application settings
-DEBUG=False
-ENVIRONMENT=production
+    
+    def _generate_basic_env_file(self) -> str:
+        """Generate basic environment file."""
+        return """# Basic Environment Configuration
+DATABASE_URL=postgresql://postgres:password@localhost:5432/app_db
+SECRET_KEY=your-secret-key-here
+DEBUG=True
 LOG_LEVEL=INFO
-PROJECT_NAME={project_name}
-
-# Server settings
-HOST=0.0.0.0
-PORT=8000
-
-# Security settings
-SECRET_KEY=your_secret_key_here_change_in_production
-ALLOWED_HOSTS=localhost,127.0.0.1
-
-# Database settings (if applicable)
-# DATABASE_URL=postgresql://user:password@localhost:5432/dbname
-
-# API keys (if applicable)
-# API_KEY=your_api_key_here
-
-# Performance settings
-WORKERS=4
-MAX_CONNECTIONS=100
-
-# Monitoring settings
-ENABLE_MONITORING=True
-METRICS_PORT=9090
-"""
-        
-        nginx_conf = f"""events {{
-    worker_connections 1024;
-}}
-
-http {{
-    upstream {project_name.lower()} {{
-        server {project_name.lower()}:8000;
-    }}
-
-    server {{
-        listen 80;
-        server_name localhost;
-
-        location / {{
-            proxy_pass http://{project_name.lower()};
-            proxy_set_header Host $host;
-            proxy_set_header X-Real-IP $remote_addr;
-            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-            proxy_set_header X-Forwarded-Proto $scheme;
-        }}
-
-        # Health check endpoint
-        location /health {{
-            proxy_pass http://{project_name.lower()}/health;
-            access_log off;
-        }}
-    }}
-}}
-"""
-        
-        return {
-            "Dockerfile": dockerfile,
-            "docker-compose.yml": docker_compose,
-            "deploy.sh": deploy_sh,
-            "deploy.ps1": deploy_ps1,
-            ".env.example": env_example,
-            "nginx.conf": nginx_conf
-        } 
+""" 
